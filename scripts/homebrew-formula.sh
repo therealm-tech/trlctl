@@ -32,7 +32,7 @@ dir="$2"
 template="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)/packaging/homebrew/trlctl.rb.in"
 
 args=(-e "s/@VERSION@/${version}/g")
-for target in aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu; do
+for target in aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-musl x86_64-unknown-linux-musl; do
   file="${dir}/trlctl-${version}-${target}.tar.gz.sha256"
   [ -f "$file" ] || die "missing ${file}"
   read -r sha256 _ < "$file"

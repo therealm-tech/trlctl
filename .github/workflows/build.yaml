@@ -59,9 +59,9 @@ jobs:
             runner: macos-26
           - target: x86_64-apple-darwin
             runner: macos-26-intel
-          - target: x86_64-unknown-linux-gnu
+          - target: x86_64-unknown-linux-musl
             runner: ubuntu-24.04
-          - target: aarch64-unknown-linux-gnu
+          - target: aarch64-unknown-linux-musl
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     env:
@@ -76,8 +76,18 @@ jobs:
         run: |
           rustup toolchain install
           rustc --version --verbose
+      - name: add the Rust target
+        run: rustup target add "$TARGET"
       - name: build the release binary
         run: cargo build --release --locked --target "$TARGET"
+      - name: check that the Linux binary is static
+        if: contains(matrix.target, 'linux-musl')
+        run: |
+          binary="target/${TARGET}/release/trlctl"
+          report="$(file "$binary")"
+          echo "$report"
+          grep -Eq 'statically linked|static-pie linked' <<< "$report"
+          "$binary" --version
       - name: package the archive and its checksum
         run: |
           name="trlctl-${VERSION}-${TARGET}"

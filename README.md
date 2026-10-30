@@ -37,7 +37,7 @@ Argo CD objects, talk to Argo CD or a cluster, or fetch the repositories a
 
 ### Installation
 
-**Homebrew**, on macOS and on Linux with glibc 2.39 or later:
+**Homebrew**, on macOS and on Linux:
 
 ```sh
 brew install therealm-tech/tap/trlctl
@@ -58,28 +58,31 @@ binary, the licence and this README, next to its `.sha256` checksum:
 | --- | --- |
 | `aarch64-apple-darwin` | macOS, Apple silicon |
 | `x86_64-apple-darwin` | macOS, Intel |
-| `aarch64-unknown-linux-gnu` | Linux, arm64, glibc 2.39 or later |
-| `x86_64-unknown-linux-gnu` | Linux, x86-64, glibc 2.39 or later |
+| `aarch64-unknown-linux-musl` | Linux, arm64, static musl binary |
+| `x86_64-unknown-linux-musl` | Linux, x86-64, static musl binary |
+
+The Linux archives are static musl binaries: they run on any distribution,
+whatever its libc.
 
 Download the latest archive with the [GitHub CLI](https://cli.github.com),
 here for Linux on x86-64:
 
 ```sh
-gh release download --repo therealm-tech/trlctl --pattern 'trlctl-*-x86_64-unknown-linux-gnu.tar.gz'
+gh release download --repo therealm-tech/trlctl --pattern 'trlctl-*-x86_64-unknown-linux-musl.tar.gz'
 ```
 
 Verify its build provenance attestation, which proves the archive was built
 from this repository by its release workflow:
 
 ```sh
-gh attestation verify trlctl-*-x86_64-unknown-linux-gnu.tar.gz --repo therealm-tech/trlctl
+gh attestation verify trlctl-*-x86_64-unknown-linux-musl.tar.gz --repo therealm-tech/trlctl
 ```
 
 Extract it, then move `trlctl` from the extracted directory to a directory on
 your `PATH`:
 
 ```sh
-tar -xzf trlctl-*-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf trlctl-*-x86_64-unknown-linux-musl.tar.gz
 ```
 
 ### Configuration

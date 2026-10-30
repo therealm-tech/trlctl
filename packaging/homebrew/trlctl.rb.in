@@ -17,12 +17,12 @@ class Trlctl < Formula
 
   on_linux do
     on_arm do
-      url "https://github.com/therealm-tech/trlctl/releases/download/v@VERSION@/trlctl-@VERSION@-aarch64-unknown-linux-gnu.tar.gz"
-      sha256 "@SHA256_AARCH64_UNKNOWN_LINUX_GNU@"
+      url "https://github.com/therealm-tech/trlctl/releases/download/v@VERSION@/trlctl-@VERSION@-aarch64-unknown-linux-musl.tar.gz"
+      sha256 "@SHA256_AARCH64_UNKNOWN_LINUX_MUSL@"
     end
     on_intel do
-      url "https://github.com/therealm-tech/trlctl/releases/download/v@VERSION@/trlctl-@VERSION@-x86_64-unknown-linux-gnu.tar.gz"
-      sha256 "@SHA256_X86_64_UNKNOWN_LINUX_GNU@"
+      url "https://github.com/therealm-tech/trlctl/releases/download/v@VERSION@/trlctl-@VERSION@-x86_64-unknown-linux-musl.tar.gz"
+      sha256 "@SHA256_X86_64_UNKNOWN_LINUX_MUSL@"
     end
   end
 
