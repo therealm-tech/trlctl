@@ -37,7 +37,7 @@ Argo CD objects, talk to Argo CD or a cluster, or fetch the repositories a
 
 ### Installation
 
-**Homebrew**, on macOS and on Linux:
+**Homebrew**, on macOS and on Linux with glibc 2.39 or later:
 
 ```sh
 brew install therealm-tech/tap/trlctl
@@ -58,8 +58,8 @@ binary, the licence and this README, next to its `.sha256` checksum:
 | --- | --- |
 | `aarch64-apple-darwin` | macOS, Apple silicon |
 | `x86_64-apple-darwin` | macOS, Intel |
-| `aarch64-unknown-linux-gnu` | Linux, arm64, glibc |
-| `x86_64-unknown-linux-gnu` | Linux, x86-64, glibc |
+| `aarch64-unknown-linux-gnu` | Linux, arm64, glibc 2.39 or later |
+| `x86_64-unknown-linux-gnu` | Linux, x86-64, glibc 2.39 or later |
 
 Download the latest archive with the [GitHub CLI](https://cli.github.com),
 here for Linux on x86-64:
