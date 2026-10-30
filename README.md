@@ -32,13 +32,54 @@ Argo CD objects, talk to Argo CD or a cluster, or fetch the repositories a
 
 ### Prerequisites
 
-- Rust and Cargo, installed with [rustup](https://rustup.rs);
+- macOS or Linux, on arm64 or x86-64;
 - Git, which `trlctl init` uses to read the repository's `origin` remote.
 
 ### Installation
 
+**Homebrew**, on macOS and on Linux:
+
 ```sh
-cargo install --locked --git https://github.com/therealm-tech/trlctl
+brew install therealm-tech/tap/trlctl
+```
+
+**Cargo**, with Rust installed through [rustup](https://rustup.rs):
+
+```sh
+cargo install --locked trlctl
+```
+
+**Prebuilt archives.** Each
+[GitHub release](https://github.com/therealm-tech/trlctl/releases) carries a
+`trlctl-<version>-<target>.tar.gz` archive per target, holding the `trlctl`
+binary, the licence and this README, next to its `.sha256` checksum:
+
+| Target | Platform |
+| --- | --- |
+| `aarch64-apple-darwin` | macOS, Apple silicon |
+| `x86_64-apple-darwin` | macOS, Intel |
+| `aarch64-unknown-linux-gnu` | Linux, arm64, glibc |
+| `x86_64-unknown-linux-gnu` | Linux, x86-64, glibc |
+
+Download the latest archive with the [GitHub CLI](https://cli.github.com),
+here for Linux on x86-64:
+
+```sh
+gh release download --repo therealm-tech/trlctl --pattern 'trlctl-*-x86_64-unknown-linux-gnu.tar.gz'
+```
+
+Verify its build provenance attestation, which proves the archive was built
+from this repository by its release workflow:
+
+```sh
+gh attestation verify trlctl-*-x86_64-unknown-linux-gnu.tar.gz --repo therealm-tech/trlctl
+```
+
+Extract it, then move `trlctl` from the extracted directory to a directory on
+your `PATH`:
+
+```sh
+tar -xzf trlctl-*-x86_64-unknown-linux-gnu.tar.gz
 ```
 
 ### Configuration
