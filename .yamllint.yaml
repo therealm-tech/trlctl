@@ -1,0 +1,26 @@
+extends: default
+
+rules:
+  # yaml-conventions: no `---` opening a file. The fixture's bootstrap root.yaml
+  # holds several documents, whose separators are required syntax.
+  document-start:
+    present: false
+    ignore:
+      - tests/fixtures/example/clusters/*/root.yaml
+  # yaml-conventions: block style only. `non-empty` still allows `{}` / `[]`.
+  braces:
+    forbid: non-empty
+  brackets:
+    forbid: non-empty
+  line-length: disable
+  # A GitHub workflow's trigger key is a bare `on:`, which YAML 1.1 reads as a
+  # boolean: checking keys fails every workflow. Values are still checked.
+  truthy:
+    allowed-values:
+      - 'true'
+      - 'false'
+    check-keys: false
+  # The default of 2 rejects `uses: org/action@<sha> # v4.2.0`, the
+  # single-space pin comment most tools and hand edits produce.
+  comments:
+    min-spaces-from-content: 1
