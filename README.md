@@ -21,7 +21,8 @@ each cluster (`clusters/`). `trlctl` implements the specification in
   cluster's `clusters/<cluster>/cluster.yaml`;
 - `trlctl validate` checks a layout against every rule of the specification
   that can be checked on files, and reports each violation with the file at
-  fault and the section of the specification it breaks.
+  fault and the section of the specification it breaks. It also warns about
+  what the specification allows but Argo CD would fail on.
 
 `trlctl` works offline, on local checkouts. It does not render the layout into
 Argo CD objects, talk to Argo CD or a cluster, or fetch the repositories a
@@ -101,23 +102,31 @@ trlctl validate --catalog ../catalogue --platform . --output json
 ```
 
 Each finding names the file at fault, relative to its layout root, and the
-section of the specification it breaks:
+section of the specification it breaks. A warning is marked as such, and names
+a section only when it relates to one:
 
 ```text
 clusters/nonprod-1/dev/whoami/default/app.yaml: §8.2: effective configuration: `revision` must not be set when `url` is not set
+clusters/nonprod-1/dev/whoami/default/app.yaml: warning: `apps/whoami/charts/whoami` does not exist in the repo catalogue: Argo CD will fail to render this source
 ```
+
+In JSON, each finding carries `file`, `severity` (`error` or `warning`),
+`message`, and `section` when it has one.
 
 `trlctl` exits with:
 
 | Status | Meaning |
 | --- | --- |
-| `0` | Success; for `validate`, the layout follows the specification |
+| `0` | Success; for `validate`, the layout follows the specification, warnings or not |
 | `1` | `validate` found at least one violation |
 | `2` | Usage error, unreadable file, or `init` refused to write |
 
 When the repo platform is a Git checkout, `validate` also checks that
-`repo.platform` in each `cluster.yaml` designates that checkout: its `origin`
-remote and the layout root's path inside it.
+`repo.platform` in each `cluster.yaml` designates that checkout. The layout
+root's path inside it must match; an `origin` remote that designates another
+repository is only a warning, since a fork or a mirror has its own. URLs are
+compared once normalised, so `git@host:org/repo.git` and
+`https://host/org/repo` designate the same repository.
 
 ## Contributing
 

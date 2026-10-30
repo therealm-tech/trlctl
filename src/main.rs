@@ -7,11 +7,12 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use tracing_subscriber::EnvFilter;
 
 use trlctl::init::{self, Prompt, Scope};
-use trlctl::validate::{Finding, validate};
+use trlctl::validate::{Finding, Severity, validate};
 
 /// Exit status when a command fails: bad usage, unreadable files, refused write.
 const EXIT_ERROR: u8 = 2;
-/// Exit status of `validate` when the layout breaks the specification.
+/// Exit status of `validate` when the layout breaks the specification;
+/// warnings alone leave the status at 0.
 const EXIT_VIOLATIONS: u8 = 1;
 
 /// Scaffold and validate repositories that follow the therealm Argo CD layout.
@@ -158,21 +159,35 @@ fn run_validate(args: &ValidateArgs) -> Result<ExitCode> {
         Output::Human => print_human(&findings),
         Output::Json => println!("{}", serde_json::json!({ "findings": findings })),
     }
-    Ok(if findings.is_empty() {
-        ExitCode::SUCCESS
-    } else {
+    Ok(if findings.iter().any(Finding::is_error) {
         ExitCode::from(EXIT_VIOLATIONS)
+    } else {
+        ExitCode::SUCCESS
     })
 }
 
 fn print_human(findings: &[Finding]) {
     for finding in findings {
-        println!("{}: {}: {}", finding.file, finding.section, finding.message);
+        let severity = match finding.severity {
+            Severity::Error => "",
+            Severity::Warning => "warning: ",
+        };
+        match &finding.section {
+            Some(section) => println!("{}: {severity}{section}: {}", finding.file, finding.message),
+            None => println!("{}: {severity}{}", finding.file, finding.message),
+        }
     }
-    match findings.len() {
-        0 => eprintln!("the layout follows the specification"),
-        1 => eprintln!("1 violation"),
-        count => eprintln!("{count} violations"),
+    let errors = findings.iter().filter(|f| f.is_error()).count();
+    let warnings = findings.len() - errors;
+    let summary = match errors {
+        0 => "the layout follows the specification".to_owned(),
+        1 => "1 violation".to_owned(),
+        count => format!("{count} violations"),
+    };
+    match warnings {
+        0 => eprintln!("{summary}"),
+        1 => eprintln!("{summary}, 1 warning"),
+        count => eprintln!("{summary}, {count} warnings"),
     }
 }
 

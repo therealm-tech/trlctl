@@ -50,19 +50,28 @@ pub fn to_https(remote: &str) -> Option<String> {
     Some(format!("https://{host}/{}", path.trim_start_matches('/')))
 }
 
-/// Whether two repository URLs designate the same repository, whatever their
-/// transport (`ssh` or `https`), credentials or trailing `.git`.
+/// The form every URL of one repository reduces to: host and path, lowercased,
+/// whatever the transport (`ssh`, scp-like or `https`), credentials, port,
+/// trailing `/` or `.git`. `None` when `url` has no host (a local path).
+///
+/// The path is lowercased too: the major Git hosts resolve repository paths
+/// case-insensitively, so a case difference is not a different repository.
+#[must_use]
+pub fn normalise_repository(url: &str) -> Option<String> {
+    let https = Url::parse(&to_https(url)?).ok()?;
+    let path = https.path().trim_end_matches('/');
+    let path = path
+        .strip_suffix(".git")
+        .unwrap_or(path)
+        .trim_end_matches('/');
+    Some(format!("{}{path}", https.host_str()?).to_lowercase())
+}
+
+/// Whether two repository URLs designate the same repository, once both are
+/// reduced by [`normalise_repository`].
 #[must_use]
 pub fn same_repository(a: &str, b: &str) -> bool {
-    let normalise = |url: &str| {
-        to_https(url).map(|https| {
-            https
-                .trim_end_matches('/')
-                .trim_end_matches(".git")
-                .to_lowercase()
-        })
-    };
-    match (normalise(a), normalise(b)) {
+    match (normalise_repository(a), normalise_repository(b)) {
         (Some(a), Some(b)) => a == b,
         _ => false,
     }
@@ -104,7 +113,9 @@ fn is_schemeless_oci(url: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_chart_repository_url, is_git_url, same_repository, to_https};
+    use super::{
+        is_chart_repository_url, is_git_url, normalise_repository, same_repository, to_https,
+    };
 
     #[test]
     fn converts_scp_like_remotes() {
@@ -209,6 +220,27 @@ mod tests {
         ] {
             assert!(!is_chart_repository_url(url), "{url}");
         }
+    }
+
+    #[test]
+    fn normalises_equivalent_repository_urls() {
+        let expected = Some("github.com/org/repo".to_owned());
+        for url in [
+            "git@github.com:org/repo.git",
+            "ssh://git@github.com/org/repo.git",
+            "ssh://git@github.com:2222/org/repo",
+            "https://github.com/org/repo.git",
+            "https://github.com/org/repo",
+            "https://github.com/org/repo/",
+            "https://github.com/org/repo.git/",
+            "https://GitHub.COM/org/repo",
+            "git@GITHUB.com:org/repo.git",
+            "https://user:secret@github.com/org/repo.git",
+            "http://github.com/org/repo",
+        ] {
+            assert_eq!(normalise_repository(url), expected, "{url}");
+        }
+        assert_eq!(normalise_repository("/srv/git/repo.git"), None);
     }
 
     #[test]

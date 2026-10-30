@@ -45,12 +45,10 @@ pub(super) fn check_catalogue_source(
     }
     let dir = catalog.join(path);
     if !dir.is_dir() {
-        out.push(
+        out.warn(
             file,
-            "§8.2",
-            format!(
-                "effective configuration: `path` `{path}` does not exist in the repo catalogue"
-            ),
+            None,
+            format!("`{path}` does not exist in the repo catalogue: Argo CD will fail to render this source"),
         );
         return Ok(());
     }

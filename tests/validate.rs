@@ -5,7 +5,7 @@ use std::process::Command;
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::str::contains;
 use tempfile::TempDir;
-use trlctl::validate::{Finding, validate};
+use trlctl::validate::{Finding, Severity, validate};
 
 /// A temporary copy of the worked example, outside any Git checkout.
 struct Example {
@@ -35,14 +35,36 @@ impl Example {
         validate(&self.root, &self.root).unwrap()
     }
 
-    /// Asserts that a finding of `section` on `file` mentions `fragment`.
+    /// Asserts that an error of `section` on `file` mentions `fragment`.
     fn assert_finding(&self, file: &str, section: &str, fragment: &str) {
+        self.assert_severity(Severity::Error, file, Some(section), fragment);
+    }
+
+    /// Asserts that a warning on `file`, of `section` when given, mentions
+    /// `fragment`, and that the layout has no error.
+    fn assert_warning(&self, file: &str, section: Option<&str>, fragment: &str) {
+        self.assert_severity(Severity::Warning, file, section, fragment);
         let findings = self.findings();
         assert!(
-            findings
-                .iter()
-                .any(|f| f.file == file && f.section == section && f.message.contains(fragment)),
-            "no {section} finding on {file} mentioning {fragment:?} in {findings:#?}"
+            !findings.iter().any(Finding::is_error),
+            "unexpected error in {findings:#?}"
+        );
+    }
+
+    fn assert_severity(
+        &self,
+        severity: Severity,
+        file: &str,
+        section: Option<&str>,
+        fragment: &str,
+    ) {
+        let findings = self.findings();
+        assert!(
+            findings.iter().any(|f| f.severity == severity
+                && f.file == file
+                && f.section.as_deref() == section
+                && f.message.contains(fragment)),
+            "no {severity:?} {section:?} finding on {file} mentioning {fragment:?} in {findings:#?}"
         );
     }
 }
@@ -154,11 +176,36 @@ fn compares_repo_platform_with_the_git_checkout() {
         "origin",
         "git@git.example.com:platform/other.git",
     ]);
-    example.assert_finding(
+    example.assert_warning(
         "clusters/mgmt-1/cluster.yaml",
-        "§9",
-        "does not designate the repository",
+        Some("§9"),
+        "does not designate the `origin` of this checkout",
     );
+}
+
+#[test]
+fn ignores_equivalent_forms_of_the_git_origin() {
+    let example = Example::new();
+    let git = |args: &[&str]| {
+        assert!(
+            Command::new("git")
+                .arg("-C")
+                .arg(&example.root)
+                .args(args)
+                .output()
+                .unwrap()
+                .status
+                .success()
+        );
+    };
+    git(&["init", "-q"]);
+    git(&[
+        "remote",
+        "add",
+        "origin",
+        "ssh://git@GIT.example.com:2222/platform/gitops",
+    ]);
+    assert_eq!(example.findings(), Vec::new());
 }
 
 #[test]
@@ -289,10 +336,14 @@ fn limits_a_catalogue_path_to_the_instance_app() {
 }
 
 #[test]
-fn requires_the_designated_directory() {
+fn warns_about_a_missing_designated_directory() {
     let example = Example::new();
     example.write(WHOAMI_DEV, "app:\n  path: apps/whoami/charts/missing\n");
-    example.assert_finding(WHOAMI_DEV, "§8.2", "does not exist in the repo catalogue");
+    example.assert_warning(
+        WHOAMI_DEV,
+        None,
+        "`apps/whoami/charts/missing` does not exist in the repo catalogue",
+    );
 }
 
 #[test]
@@ -398,7 +449,38 @@ fn cli_exits_one_and_prints_json_on_violations() {
         .clone();
     let json: serde_json::Value = serde_json::from_slice(&output).unwrap();
     assert_eq!(json["findings"][0]["file"], WHOAMI_DEV);
+    assert_eq!(json["findings"][0]["severity"], "error");
     assert_eq!(json["findings"][0]["section"], "§8.1");
+}
+
+#[test]
+fn cli_exits_zero_on_warnings_only() {
+    let example = Example::new();
+    example.write(WHOAMI_DEV, "app:\n  path: apps/whoami/charts/missing\n");
+    trlctl()
+        .args(["validate", "--catalog"])
+        .arg(&example.root)
+        .arg("--platform")
+        .arg(&example.root)
+        .assert()
+        .success()
+        .stdout(contains(format!(
+            "{WHOAMI_DEV}: warning: `apps/whoami/charts/missing` does not exist"
+        )))
+        .stderr(contains("the layout follows the specification, 1 warning"));
+    let output = trlctl()
+        .args(["validate", "--output", "json", "--catalog"])
+        .arg(&example.root)
+        .arg("--platform")
+        .arg(&example.root)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let json: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(json["findings"][0]["severity"], "warning");
+    assert!(json["findings"][0].get("section").is_none());
 }
 
 #[test]
