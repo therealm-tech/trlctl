@@ -19,6 +19,19 @@ version: install the toolchain and the hooks, keep `cargo test` and
 
 - **Go**, which pre-commit needs to build the `actionlint` hook. Install it
   from <https://go.dev/doc/install>.
+- **ShellCheck**, which the `shellcheck` hook runs on the scripts:
+
+  **macOS**
+
+  ```sh
+  brew install shellcheck
+  ```
+
+  **Linux**
+
+  ```sh
+  sudo apt install -y shellcheck
+  ```
 
 Then, from a fresh clone:
 
@@ -80,8 +93,10 @@ pre-commit run cargo-clippy --all-files
 | `check-yaml`, `yamllint` | YAML syntax and style ([`.yamllint.yaml`](.yamllint.yaml)) | Edit the file |
 | `check-added-large-files`, `check-merge-conflict`, `detect-private-key` | Accidental commits | Remove the file or marker |
 | `actionlint` | GitHub Actions workflows | Edit the workflow |
+| `zizmor` | Security of the workflows and the Dependabot configuration, offline audits | Edit the workflow |
 | `cargo-fmt` | Rust formatting | `cargo fmt` |
 | `cargo-clippy` | Clippy, pedantic, warnings denied | Edit the code |
+| `shellcheck` | Shell scripts in [`scripts/`](scripts/) | Edit the script |
 | `no-co-authors` (commit-msg) | No `Co-Authored-By:` or `Generated with` line | Rewrite the message |
 
 A red hook is a real finding: `--no-verify` and `SKIP=` are not the fix. If a
