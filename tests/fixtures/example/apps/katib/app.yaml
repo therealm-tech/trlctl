@@ -1,0 +1,4 @@
+app:
+  path: apps/katib/manifests
+  project: default
+  namespace: kubeflow

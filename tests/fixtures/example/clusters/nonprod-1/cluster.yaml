@@ -1,0 +1,7 @@
+repo:
+  catalog:
+    url: https://git.example.com/platform/gitops.git
+    revision: main
+  platform:
+    url: https://git.example.com/platform/gitops.git
+    revision: main

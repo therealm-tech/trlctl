@@ -1,0 +1,144 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bootstrap
+  namespace: argocd
+  annotations:
+    # This Application renders the file it is defined in: without Prune=false,
+    # a sync after this file is renamed or lost deletes it, the roots below and
+    # every ApplicationSet they own.
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  source:
+    repoURL: https://git.example.com/platform/gitops.git
+    targetRevision: main
+    path: clusters/mgmt-1
+    directory:
+      recurse: false
+      include: root.yaml
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-mgmt-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  sources:
+    - repoURL: registry.example.com/charts
+      chart: therealm-layout
+      targetRevision: 0.1.0
+      helm:
+        releaseName: root-mgmt-1
+        valueFiles:
+          - $platform/clusters/mgmt-1/cluster.yaml
+        valuesObject:
+          cluster: mgmt-1
+          application:
+            labels:
+              platform.example.com/cluster: "{{ .values.cluster }}"
+              platform.example.com/env: "{{ .values.env }}"
+              platform.example.com/app: "{{ .values.app }}"
+              platform.example.com/instance: "{{ .values.instance }}"
+    - repoURL: https://git.example.com/platform/gitops.git
+      targetRevision: main
+      ref: platform
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-nonprod-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  sources:
+    - repoURL: registry.example.com/charts
+      chart: therealm-layout
+      targetRevision: 0.1.0
+      helm:
+        releaseName: root-nonprod-1
+        valueFiles:
+          - $platform/clusters/nonprod-1/cluster.yaml
+        valuesObject:
+          cluster: nonprod-1
+          application:
+            labels:
+              platform.example.com/cluster: "{{ .values.cluster }}"
+              platform.example.com/env: "{{ .values.env }}"
+              platform.example.com/app: "{{ .values.app }}"
+              platform.example.com/instance: "{{ .values.instance }}"
+    - repoURL: https://git.example.com/platform/gitops.git
+      targetRevision: main
+      ref: platform
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-prod-eu-1
+  namespace: argocd
+spec:
+  project: default
+  revisionHistoryLimit: 0
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  sources:
+    - repoURL: registry.example.com/charts
+      chart: therealm-layout
+      targetRevision: 0.1.0
+      helm:
+        releaseName: root-prod-eu-1
+        valueFiles:
+          - $platform/clusters/prod-eu-1/cluster.yaml
+        valuesObject:
+          cluster: prod-eu-1
+          application:
+            labels:
+              platform.example.com/cluster: "{{ .values.cluster }}"
+              platform.example.com/env: "{{ .values.env }}"
+              platform.example.com/app: "{{ .values.app }}"
+              platform.example.com/instance: "{{ .values.instance }}"
+    - repoURL: https://git.example.com/platform/gitops.git
+      targetRevision: main
+      ref: platform
+  syncPolicy:
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m

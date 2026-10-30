@@ -1,0 +1,6 @@
+redis-ha:
+  enabled: true
+server:
+  replicas: 2
+repoServer:
+  replicas: 2

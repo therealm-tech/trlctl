@@ -1,0 +1,9 @@
+app:
+  path: apps/whoami/charts/whoami
+  project: default
+  namespace: whoami
+  syncOptions:
+    - CreateNamespace=true
+  managedNamespaceMetadata:
+    labels:
+      pod-security.kubernetes.io/enforce: restricted

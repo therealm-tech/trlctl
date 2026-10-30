@@ -1,0 +1,12 @@
+app:
+  url: ghcr.io/argoproj/argo-helm
+  chart: argo-cd
+  revision: 10.11.6
+  project: default
+  namespace: argocd
+  syncOptions:
+    - CreateNamespace=true
+    - ServerSideApply=true
+  managedNamespaceMetadata:
+    labels:
+      pod-security.kubernetes.io/enforce: baseline

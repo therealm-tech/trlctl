@@ -1,0 +1,59 @@
+whoami:
+  # -- Number of pods.
+  replicaCount: 1
+  # -- Number of old ReplicaSets kept for rollback.
+  revisionHistoryLimit: 0
+  image:
+    # -- Image repository.
+    repository: docker.io/traefik/whoami
+    # -- (string) Image tag. Defaults to `.Chart.AppVersion`.
+    tag: ~
+  # -- Port the container listens on.
+  port: 8080
+  # -- (list) Extra environment variables for the container.
+  extraEnv: []
+  # -- (list) Extra volumes for the pod.
+  extraVolumes: []
+  # -- (list) Extra volume mounts for the container.
+  extraVolumeMounts: []
+  # -- Pod-level security context.
+  podSecurityContext:
+    # -- Refuse to run as root.
+    runAsNonRoot: true
+    # -- UID of the container process.
+    runAsUser: 65532
+    # -- GID of the container process.
+    runAsGroup: 65532
+    # -- GID owning mounted volumes.
+    fsGroup: 65532
+    # -- Seccomp profile.
+    seccompProfile:
+      # -- Seccomp profile type.
+      type: RuntimeDefault
+  # -- Container-level security context.
+  securityContext:
+    # -- Forbid privilege escalation.
+    allowPrivilegeEscalation: false
+    # -- Mount the root filesystem read-only.
+    readOnlyRootFilesystem: true
+    # -- Linux capabilities.
+    capabilities:
+      # -- Capabilities dropped from the container.
+      drop:
+        - ALL
+  # -- Container resources. No CPU limit on purpose.
+  resources:
+    # -- Resource requests.
+    requests:
+      # -- CPU request.
+      cpu: 10m
+      # -- Memory request.
+      memory: 16Mi
+      # -- Ephemeral storage request.
+      ephemeral-storage: 16Mi
+    # -- Resource limits.
+    limits:
+      # -- Memory limit.
+      memory: 32Mi
+      # -- Ephemeral storage limit.
+      ephemeral-storage: 32Mi

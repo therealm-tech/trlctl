@@ -1,0 +1,3 @@
+app:
+  path: apps/team-quotas/manifests
+  project: default
