@@ -16,15 +16,38 @@ use crate::urls::{is_chart_repository_url, is_git_url, same_repository, to_https
 use config::{Loaded, STRING_FIELDS, app_mapping, cluster_repos, is_set, load, merge};
 use source::{KUSTOMIZATION_FILES, check_catalogue_source};
 
-/// One way a repository breaks the layout specification.
+/// How serious a finding is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Severity {
+    /// The layout breaks the specification.
+    Error,
+    /// The layout follows the specification, but something about it is
+    /// likely wrong or will fail once Argo CD renders it.
+    Warning,
+}
+
+/// One problem `validate` found in a repository.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct Finding {
     /// The file or directory at fault, relative to its layout root.
     pub file: String,
-    /// The section of the specification it breaks, e.g. `§8.2`.
-    pub section: String,
+    /// Whether the finding breaks the specification or only warns.
+    pub severity: Severity,
+    /// The section of the specification it relates to, e.g. `§8.2`; `None`
+    /// for a warning the specification says nothing about.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section: Option<String>,
     /// What is wrong.
     pub message: String,
+}
+
+impl Finding {
+    /// Whether the finding breaks the specification.
+    #[must_use]
+    pub fn is_error(&self) -> bool {
+        self.severity == Severity::Error
+    }
 }
 
 #[derive(Default)]
@@ -32,12 +55,21 @@ pub(crate) struct Findings(BTreeSet<Finding>);
 
 impl Findings {
     fn push(&mut self, file: &str, section: &str, message: impl Into<String>) {
+        self.insert(file, Severity::Error, Some(section), message.into());
+    }
+
+    fn warn(&mut self, file: &str, section: Option<&str>, message: impl Into<String>) {
+        self.insert(file, Severity::Warning, section, message.into());
+    }
+
+    fn insert(&mut self, file: &str, severity: Severity, section: Option<&str>, message: String) {
         let finding = Finding {
             file: file.to_owned(),
-            section: section.to_owned(),
-            message: message.into(),
+            severity,
+            section: section.map(str::to_owned),
+            message,
         };
-        debug!(file = %finding.file, section = %finding.section, message = %finding.message, "finding");
+        debug!(file = %finding.file, severity = ?finding.severity, section = ?finding.section, message = %finding.message, "finding");
         self.0.insert(finding);
     }
 }
@@ -194,7 +226,8 @@ fn check_cluster_file(platform: &Path, cluster_dir: &Path, out: &mut Findings) -
 
 /// SPEC.md §9: `repo.platform` designates the repository and layout root
 /// holding the `cluster.yaml`. Checkable only when `platform` is in a Git
-/// checkout, and the URL only when that checkout has an `origin` remote.
+/// checkout, and the URL only when that checkout has an `origin` remote. A
+/// URL mismatch is only a warning: a fork or a mirror has another `origin`.
 fn check_platform_repository(
     platform: &Path,
     url: &str,
@@ -210,10 +243,13 @@ fn check_platform_repository(
         && !same_repository(&origin, url)
     {
         let origin = to_https(&origin).unwrap_or(origin);
-        out.push(
+        out.warn(
             file,
-            "§9",
-            format!("`repo.platform.url` `{url}` does not designate the repository holding this file (`{origin}`)"),
+            Some("§9"),
+            format!(
+                "`repo.platform.url` `{url}` does not designate the `origin` of this checkout (`{origin}`); \
+                 expected when validating a fork or a mirror"
+            ),
         );
     }
     let (Ok(toplevel), Ok(root)) = (fs::canonicalize(toplevel), fs::canonicalize(platform)) else {
