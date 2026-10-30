@@ -10,6 +10,8 @@ license = "MIT"
 exclude = [
     ".github/",
     "docs/",
+    "packaging/",
+    "scripts/",
 ]
 keywords = [
     "argocd",

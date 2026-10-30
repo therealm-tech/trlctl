@@ -32,6 +32,16 @@ repos:
     hooks:
       - id: actionlint
 
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.31.1
+    hooks:
+      - id: zizmor
+        # Online audits would depend on the network and on whether a GitHub
+        # token happens to be exported.
+        args:
+          - --no-progress
+          - --offline
+
   - repo: local
     hooks:
       - id: no-co-authors
@@ -54,3 +64,9 @@ repos:
         language: system
         pass_filenames: false
         files: (\.rs|^Cargo\.(toml|lock)|^rust-toolchain\.toml)$
+      - id: shellcheck
+        name: shellcheck
+        entry: shellcheck
+        language: system
+        types:
+          - shell
