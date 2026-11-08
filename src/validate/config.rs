@@ -90,6 +90,15 @@ fn check_field_types(app: &Mapping, file: &str, out: &mut Findings) {
         Some(Value::Sequence(items)) if items.iter().all(Value::is_string) => {}
         Some(_) => out.push(file, "§8.1", "`syncOptions` must be a sequence of strings"),
     }
+    match app.get("ignoreDifferences") {
+        None | Some(Value::Null) => {}
+        Some(Value::Sequence(items)) if items.iter().all(Value::is_mapping) => {}
+        Some(_) => out.push(
+            file,
+            "§8.1",
+            "`ignoreDifferences` must be a sequence of mappings",
+        ),
+    }
     match app.get("managedNamespaceMetadata") {
         None | Some(Value::Null | Value::Mapping(_)) => {}
         Some(other) => out.push(
@@ -274,6 +283,21 @@ mod tests {
         let mut base = mapping("syncOptions: [A, B]\nrevision: main");
         merge(&mut base, &mapping("syncOptions: [C]\nrevision: v1"));
         assert_eq!(base, mapping("syncOptions: [C]\nrevision: v1"));
+    }
+
+    #[test]
+    fn replaces_sequences_of_mappings_whole() {
+        let mut base = mapping(
+            "ignoreDifferences: [{kind: Secret, jsonPointers: [/data]}, {kind: ConfigMap}]",
+        );
+        merge(
+            &mut base,
+            &mapping("ignoreDifferences: [{kind: Secret, name: a}]"),
+        );
+        assert_eq!(
+            base,
+            mapping("ignoreDifferences: [{kind: Secret, name: a}]")
+        );
     }
 
     #[test]
