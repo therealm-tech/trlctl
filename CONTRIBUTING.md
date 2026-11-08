@@ -147,8 +147,9 @@ scripts/release.sh 0.2.0
 The script refuses a dirty tree, another branch, a `main` behind `origin` and
 an existing tag. It sets the version in `Cargo.toml` and `Cargo.lock`, commits
 `release 0.2.0`, creates the annotated tag `v0.2.0`, then asks before pushing
-both; answering no prints the push command to run later. `--dry-run` prints
-what it would do and changes nothing.
+both; answering no prints the push command to run later. When `Cargo.toml`
+already holds the version, it tags the current commit without a release
+commit. `--dry-run` prints what it would do and changes nothing.
 
 Pushing the tag starts the [`release`](.github/workflows/release.yaml)
 workflow:
