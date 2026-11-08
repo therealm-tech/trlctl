@@ -236,6 +236,27 @@ fn checks_app_yaml_structure() {
 }
 
 #[test]
+fn checks_ignore_differences_type() {
+    let example = Example::new();
+    example.write(
+        WHOAMI_DEV,
+        "app:\n  ignoreDifferences:\n    - /spec/replicas\n",
+    );
+    example.assert_finding(
+        WHOAMI_DEV,
+        "§8.1",
+        "`ignoreDifferences` must be a sequence of mappings",
+    );
+}
+
+#[test]
+fn accepts_null_ignore_differences() {
+    let example = Example::new();
+    example.write(WHOAMI_DEV, "app:\n  ignoreDifferences: null\n");
+    assert_eq!(example.findings(), Vec::new());
+}
+
+#[test]
 fn rejects_an_unquoted_numeric_revision() {
     let example = Example::new();
     example.write(ARGOCD_PROD, "app:\n  revision: 1.10\n");

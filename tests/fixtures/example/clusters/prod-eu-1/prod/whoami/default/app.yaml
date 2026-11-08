@@ -1,0 +1,10 @@
+app:
+  syncOptions:
+    - CreateNamespace=true
+    - RespectIgnoreDifferences=true
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: whoami
+      jsonPointers:
+        - /spec/replicas
