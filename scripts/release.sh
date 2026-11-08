@@ -6,7 +6,8 @@ usage() {
 Usage: scripts/release.sh [--dry-run] <version>
 
 Cut the trlctl release <version>: set it in Cargo.toml and Cargo.lock, commit,
-create the annotated tag v<version>, then ask before pushing both. Pushing the
+create the annotated tag v<version>, then ask before pushing both. When
+Cargo.toml already holds <version>, skip the commit and tag HEAD. Pushing the
 tag starts the release workflow, which publishes the release.
 
 <version> is semver, without the leading v. A pre-release version (with a
@@ -66,20 +67,26 @@ git fetch --quiet --tags origin "$branch"
 ! git rev-parse --quiet --verify "refs/tags/${tag}" > /dev/null || die "tag ${tag} already exists"
 
 current="$(cargo pkgid | sed 's/.*[#@]//')"
-[ "$current" != "$version" ] || die "Cargo.toml is already at ${version}"
 
 subject="release ${version}"
-echo "version: ${current} -> ${version}"
-echo "commit:  ${subject}"
+if [ "$current" = "$version" ]; then
+  echo "version: ${version} (already in Cargo.toml)"
+  echo "commit:  none, tagging HEAD"
+else
+  echo "version: ${current} -> ${version}"
+  echo "commit:  ${subject}"
+fi
 echo "tag:     ${tag}"
 
 if [ "$dry_run" = true ]; then
   exit 0
 fi
 
-cargo set-version "$version"
-git add Cargo.toml Cargo.lock
-git commit --quiet --message "$subject"
+if [ "$current" != "$version" ]; then
+  cargo set-version "$version"
+  git add Cargo.toml Cargo.lock
+  git commit --quiet --message "$subject"
+fi
 git tag --annotate "$tag" --message "trlctl ${version}"
 
 push=(git push --atomic origin "$branch" "$tag")
