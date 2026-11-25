@@ -29,6 +29,32 @@ each cluster (`clusters/`). `trlctl` implements the specification in
 Argo CD objects, talk to Argo CD or a cluster, or fetch the repositories a
 `cluster.yaml` names.
 
+## The need
+
+A platform team keeps its Argo CD deployments in Git, laid out as the
+specification describes: an app's defaults in `apps/`, an environment's
+overrides in `envs/`, and the instances each cluster runs in `clusters/`. Every
+change to that tree adds, moves or edits files whose place decides what gets
+deployed, and where.
+
+Without a checker, the rules live in reviewers' heads. A `values.yaml` one
+level off, an `app.yaml` setting `revision` without `url`, or a source path
+pointing at a chart that does not exist all look fine in a diff. They surface
+later: as an app Argo CD fails to render once the change is merged, or as an
+override that silently never applies. Starting a new cluster means copying
+another one's directory and editing its repository URLs by hand.
+
+`trlctl validate` runs the specification's checks on the files, before the
+merge. Each finding names the file and the section it breaks, and the command
+exits non-zero, so it fits a pull-request pipeline:
+
+```sh
+trlctl validate --output json
+```
+
+`trlctl init` creates a cluster's skeleton with its URLs taken from the
+repository's `origin` remote.
+
 ## Getting started
 
 ### Prerequisites
