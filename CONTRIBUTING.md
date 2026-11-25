@@ -111,6 +111,7 @@ request and say why. CI runs the same hooks.
 | [`security`](.github/workflows/security.yaml) | every pull request, push to `main`, daily, manual | `trivy fs` on the repository: fails on fixable `HIGH`/`CRITICAL` vulnerabilities, reports every finding to code scanning | `trivy fs --severity HIGH,CRITICAL --ignore-unfixed .` |
 | [`build`](.github/workflows/build.yaml) | pull requests and pushes to `main` that touch the code, the toolchain, the packaging or the workflow; manual; called by `release` | builds the four release archives on native runners, renders the Homebrew formula and checks it with `brew style` | `cargo build --release --locked` |
 | [`release`](.github/workflows/release.yaml) | tag `v*` | see [Releasing](#releasing) | none: it publishes |
+| [`scorecard`](.github/workflows/scorecard.yaml) | push to `main`, weekly, a change to branch protection | grades the repository's supply-chain practices with OpenSSF Scorecard, publishes the score behind the README badge and reports the findings to code scanning | none: it grades the repository on GitHub |
 
 `quality` and `security` are not path-filtered, so both can be required checks
 in branch protection; `build` is path-filtered, so it must not be one. These three need no secret;

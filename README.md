@@ -4,6 +4,8 @@
 
 # trlctl
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/therealm-tech/trlctl/badge)](https://scorecard.dev/viewer/?uri=github.com/therealm-tech/trlctl)
+
 `trlctl` scaffolds and validates Git repositories that follow the therealm
 Argo CD layout.
 
