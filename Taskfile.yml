@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: '3'
+
+set:
+  - errexit
+  - nounset
+  - pipefail
+
+tasks:
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  setup:
+    desc: Install the git hooks
+    cmds:
+      - pre-commit install
+
+  lint:
+    desc: Run every pre-commit hook on the whole repository
+    cmds:
+      - pre-commit run --all-files --show-diff-on-failure
+
+  test:
+    desc: Run the test suite
+    cmds:
+      - cargo test --locked {{.CLI_ARGS}}
+
+  build:
+    desc: Build the release binary
+    cmds:
+      - cargo build --release --locked {{.CLI_ARGS}}
+
+  release:
+    desc: Bump, commit and tag a release, then ask before pushing
+    interactive: true
+    cmds:
+      - scripts/release.sh {{.CLI_ARGS}}

@@ -8,7 +8,8 @@ on:
       - src/**
       - Cargo.toml
       - Cargo.lock
-      - rust-toolchain.toml
+      - mise.toml
+      - mise.lock
       - packaging/**
       - scripts/homebrew-formula.sh
       - .github/workflows/build.yaml
@@ -17,7 +18,8 @@ on:
       - src/**
       - Cargo.toml
       - Cargo.lock
-      - rust-toolchain.toml
+      - mise.toml
+      - mise.lock
       - packaging/**
       - scripts/homebrew-formula.sh
       - .github/workflows/build.yaml
@@ -72,10 +74,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: install the Rust toolchain from rust-toolchain.toml
-        run: |
-          rustup toolchain install
-          rustc --version --verbose
+      - name: install the Rust toolchain
+        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+        with:
+          cache: false
+          install_args: rust
+      - name: show the Rust toolchain
+        run: rustc --version --verbose
       - name: add the Rust target
         run: rustup target add "$TARGET"
       - name: build the release binary

@@ -2,48 +2,37 @@
 
 Issues and pull requests go to
 [therealm-tech/trlctl](https://github.com/therealm-tech/trlctl). The short
-version: install the toolchain and the hooks, keep `cargo test` and
-`pre-commit run --all-files` green, and update the docs in the same change.
+version: install the tools with mise, keep `task test` and `task lint` green,
+and update the docs in the same change.
 
 ## Development setup
 
-- **Rust**, through [rustup](https://rustup.rs). The toolchain is pinned in
-  [`rust-toolchain.toml`](rust-toolchain.toml); rustup installs that version,
-  with `rustfmt` and `clippy`, the first time `cargo` runs in the repository.
-- **Git**, used by `trlctl init` and by the tests.
-- **pre-commit**:
-
-  ```sh
-  pipx install pre-commit
-  ```
-
-- **Go**, which pre-commit needs to build the `actionlint` hook. Install it
-  from <https://go.dev/doc/install>.
-- **ShellCheck**, which the `shellcheck` hook runs on the scripts:
-
-  **macOS**
-
-  ```sh
-  brew install shellcheck
-  ```
-
-  **Linux**
-
-  ```sh
-  sudo apt install -y shellcheck
-  ```
+Install [mise](https://mise.jdx.dev/installing-mise.html), which installs
+every other tool at the version pinned in [`mise.toml`](mise.toml): the Rust
+toolchain, pre-commit, Task, and what the hooks and the release script call.
+You also need **Git**, used by `trlctl init` and by the tests.
 
 Then, from a fresh clone:
 
 ```sh
-pre-commit install
+mise trust
 ```
 
 ```sh
-cargo test
+mise install
 ```
 
-A green `cargo test` means the setup works. See
+```sh
+task setup
+```
+
+`task setup` installs the git hooks. Check the setup with:
+
+```sh
+task test
+```
+
+A green run means the setup works. `task --list` shows the other tasks; see
 [README.md](README.md#getting-started) for running `trlctl` itself.
 
 ## Running the tests
@@ -51,13 +40,13 @@ A green `cargo test` means the setup works. See
 The whole suite:
 
 ```sh
-cargo test
+task test
 ```
 
-A single test:
+A single test, with the arguments after `--` passed to `cargo test`:
 
 ```sh
-cargo test --test validate rejects_a_revision_without_url
+task test -- --test validate rejects_a_revision_without_url
 ```
 
 - **Unit tests** live next to the code they cover, in `src/`.
@@ -80,25 +69,22 @@ The hooks in [`.pre-commit-config.yaml`](.pre-commit-config.yaml) must pass
 before a change is pushed:
 
 ```sh
-pre-commit run --all-files
+task lint
 ```
 
 ```sh
 pre-commit run cargo-clippy --all-files
 ```
 
+Most hooks fix the file or name the line at fault. Those worth a word:
+
 | Hook | Checks | Fix |
 | --- | --- | --- |
-| `trailing-whitespace`, `end-of-file-fixer` | Whitespace | Fixed in place; re-run |
-| `check-yaml`, `yamllint` | YAML syntax and style ([`.yamllint.yaml`](.yamllint.yaml)) | Edit the file |
-| `check-added-large-files`, `check-merge-conflict`, `detect-private-key` | Accidental commits | Remove the file or marker |
-| `actionlint` | GitHub Actions workflows | Edit the workflow |
+| `cargo-clippy` | Clippy with `pedantic`, warnings denied | Edit the code; a lint that must be allowed gets a scoped `#[allow]` with its reason |
+| `mise-fmt` | Formatting of [`mise.toml`](mise.toml) | Rewrites the file; re-run |
 | `zizmor` | Security of the workflows, offline audits | Edit the workflow |
 | `renovate-config-validator` | [`renovate.json`](renovate.json), migrated keys included | `npx --package renovate renovate-config-validator --strict --migrate` |
-| `cargo-fmt` | Rust formatting | `cargo fmt` |
-| `cargo-clippy` | Clippy, pedantic, warnings denied | Edit the code |
-| `shellcheck` | Shell scripts in [`scripts/`](scripts/) | Edit the script |
-| `no-co-authors` (commit-msg) | No `Co-Authored-By:` or `Generated with` line | Rewrite the message |
+| `no-co-authors` (commit-msg) | No `Co-Authored-By:` or `Generated with` line; `task lint` skips it | Rewrite the message |
 
 A red hook is a real finding: `--no-verify` and `SKIP=` are not the fix. If a
 rule is wrong for this repository, change its configuration in the same pull
@@ -106,18 +92,20 @@ request and say why. CI runs the same hooks.
 
 ## Continuous integration
 
-| Workflow | Triggers on | What it does | Reproduce locally |
-| --- | --- | --- | --- |
-| [`quality`](.github/workflows/quality.yaml) | every pull request, push to `main` | `pre-commit run --all-files`; `cargo test --locked` | `pre-commit run --all-files`, `cargo test` |
-| [`security`](.github/workflows/security.yaml) | every pull request, push to `main`, daily, manual | `trivy fs` on the repository: fails on fixable `HIGH`/`CRITICAL` vulnerabilities, reports every finding to code scanning | `trivy fs --severity HIGH,CRITICAL --ignore-unfixed .` |
-| [`build`](.github/workflows/build.yaml) | pull requests and pushes to `main` that touch the code, the toolchain, the packaging or the workflow; manual; called by `release` | builds the four release archives on native runners, renders the Homebrew formula and checks it with `brew style` | `cargo build --release --locked` |
-| [`release`](.github/workflows/release.yaml) | tag `v*` | see [Releasing](#releasing) | none: it publishes |
-| [`scorecard`](.github/workflows/scorecard.yaml) | push to `main`, weekly, a change to branch protection | grades the repository's supply-chain practices with OpenSSF Scorecard, publishes the score behind the README badge and reports the findings to code scanning | none: it grades the repository on GitHub |
+| Workflow | Purpose | Reproduce locally |
+| --- | --- | --- |
+| [`quality`](.github/workflows/quality.yaml) | Quality gate: the pre-commit hooks and the tests | `task lint`, `task test` |
+| [`security`](.github/workflows/security.yaml) | `trivy fs` on the lockfiles: fails on fixable `HIGH`/`CRITICAL` vulnerabilities, reports every finding to code scanning | `trivy fs --severity HIGH,CRITICAL --ignore-unfixed .` |
+| [`build`](.github/workflows/build.yaml) | The four release archives on native runners, and the Homebrew formula checked with `brew style` | `task build` |
+| [`release`](.github/workflows/release.yaml) | Publishes a release, see [Releasing](#releasing) | none: it publishes |
+| [`scorecard`](.github/workflows/scorecard.yaml) | Grades the repository's supply-chain practices with OpenSSF Scorecard, publishes the score behind the README badge and reports the findings to code scanning | none: it grades the repository on GitHub |
 
-`quality` and `security` are not path-filtered, so both can be required checks
-in branch protection; `build` is path-filtered, so it must not be one. These three need no secret;
-the code-scanning upload uses the workflow's own token and is skipped on pull
-requests from forks.
+The jobs of `quality` and `security` are required to merge into `main`.
+`security` also runs daily, so it can go red on `main` when a new CVE lands
+with no change of yours. `build` only runs when the code, the toolchain, the
+packaging or the workflow changes, which is why it is not required. None of
+these needs a secret; the code-scanning upload uses the workflow's own token
+and is skipped on pull requests from forks.
 
 [Renovate](renovate.json) proposes the dependency updates: crates, action
 pins, hook revisions and dev tools, with a weekly lockfile
@@ -140,17 +128,12 @@ issue lists what it holds back.
 
 ## Releasing
 
-[`scripts/release.sh`](scripts/release.sh) is the only supported way to cut a
-release. It needs `cargo set-version`, from cargo-edit:
+[`scripts/release.sh`](scripts/release.sh), run through `task release`, is the
+only supported way to cut a release. From a clean `main`, up to date with
+`origin`:
 
 ```sh
-cargo install --locked cargo-edit
-```
-
-From a clean `main`, up to date with `origin`:
-
-```sh
-scripts/release.sh 0.2.0
+task release -- 0.2.0
 ```
 
 The script refuses a dirty tree, another branch, a `main` behind `origin` and
@@ -212,7 +195,7 @@ only.
 Trusted publishing can only be configured on a crate that exists, so the very
 first version of `trlctl` is published by hand, with an API token:
 
-1. Cut the release with `scripts/release.sh` and answer no to the push
+1. Cut the release with `task release` and answer no to the push
    question.
 2. Create an API token with the `publish-new` scope at
    <https://crates.io/settings/tokens>, then, from the release commit:

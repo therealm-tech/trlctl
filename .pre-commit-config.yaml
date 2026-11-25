@@ -4,7 +4,7 @@ default_install_hook_types:
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -13,11 +13,12 @@ repos:
           - --allow-multiple-documents
         exclude: ^tests/fixtures/.*/charts/[^/]+/templates/
       - id: check-added-large-files
+        exclude: ^(.*/)?Cargo\.lock$
       - id: check-merge-conflict
       - id: detect-private-key
 
   - repo: https://github.com/adrienverge/yamllint
-    rev: v1.38.0
+    rev: cba56bcde1fdd01c1deb3f945e69764c291a6530  # frozen: v1.38.0
     hooks:
       - id: yamllint
         # Warning-level rules (document-start among them) are printed and then
@@ -28,12 +29,12 @@ repos:
         exclude: ^tests/fixtures/.*/charts/[^/]+/templates/
 
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.12
+    rev: 914e7df21a07ef503a81201c76d2b11c789d3fca  # frozen: v1.7.12
     hooks:
       - id: actionlint
 
   - repo: https://github.com/zizmorcore/zizmor-pre-commit
-    rev: v1.31.1
+    rev: c92afdf2c6ca336aaa8f39e2bd8d48f62dbd8e1f  # frozen: v1.31.1
     hooks:
       - id: zizmor
         # Online audits would depend on the network and on whether a GitHub
@@ -50,6 +51,16 @@ repos:
           - --strict
           - --no-global
 
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: 745eface02aef23e168a8afb6b5737818efbea95  # frozen: v0.11.0.1
+    hooks:
+      - id: shellcheck
+
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: a76b92851fc9eede9f9bc4073eb55202f34eb0df  # frozen: 0.39.0
+    hooks:
+      - id: check-taskfile
+
   - repo: local
     hooks:
       - id: no-co-authors
@@ -60,6 +71,12 @@ repos:
           - --ignore-case
         stages:
           - commit-msg
+      - id: mise-fmt
+        name: mise fmt
+        entry: mise fmt
+        language: system
+        files: ^mise\.toml$
+        pass_filenames: false
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --all --check
@@ -71,10 +88,4 @@ repos:
         entry: cargo clippy --all-targets --locked -- -D warnings
         language: system
         pass_filenames: false
-        files: (\.rs|^Cargo\.(toml|lock)|^rust-toolchain\.toml)$
-      - id: shellcheck
-        name: shellcheck
-        entry: shellcheck
-        language: system
-        types:
-          - shell
+        files: (\.rs|^Cargo\.(toml|lock)|^mise\.(toml|lock))$
