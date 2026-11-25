@@ -156,29 +156,16 @@ fn check_clusters(
     for (cluster, cluster_dir) in subdirectories(&clusters_dir)? {
         check_name(&cluster, &format!("clusters/{cluster}/"), out);
         check_cluster_file(platform, &cluster_dir, out)?;
+        check_unread_directories(&cluster, &cluster_dir, apps, out)?;
         let mut cluster_apps = BTreeMap::new();
-        let mut env_dirs = Vec::new();
-        for (name, dir) in subdirectories(&cluster_dir)? {
-            if apps.contains_key(&name) {
-                if has_instances(&dir)? {
-                    out.push(
-                        &format!("clusters/{cluster}/{name}/"),
-                        "§5",
-                        format!(
-                            "`{name}` is an app of the repo catalogue, so this is a cluster×app \
-                             directory and the instances under it do not exist: an env must not be named like an app"
-                        ),
-                    );
-                }
-                let path = dir.join("app.yaml");
-                if path.is_file() {
-                    cluster_apps.insert(name, app_file(&path, &relative(platform, &path), out)?);
-                }
-            } else {
-                env_dirs.push((name, dir));
+        for (app, dir) in subdirectories(&cluster_dir.join("apps"))? {
+            check_name(&app, &format!("clusters/{cluster}/apps/{app}/"), out);
+            let path = dir.join("app.yaml");
+            if path.is_file() {
+                cluster_apps.insert(app, app_file(&path, &relative(platform, &path), out)?);
             }
         }
-        for (env, env_dir) in env_dirs {
+        for (env, env_dir) in subdirectories(&cluster_dir.join("envs"))? {
             let level = Levels {
                 catalog,
                 platform,
@@ -189,6 +176,44 @@ fn check_clusters(
                 env: &env,
             };
             check_env(&level, &env_dir, out)?;
+        }
+    }
+    Ok(())
+}
+
+/// SPEC.md §5: only `apps/` and `envs/` are read under `clusters/<cluster>/`.
+/// Any other directory is ignored, but one holding instances or a
+/// cluster×app file is almost certainly misplaced, so it gets a warning.
+fn check_unread_directories(
+    cluster: &str,
+    cluster_dir: &Path,
+    apps: &BTreeMap<String, Mapping>,
+    out: &mut Findings,
+) -> io::Result<()> {
+    for (name, dir) in subdirectories(cluster_dir)? {
+        if name == "apps" || name == "envs" {
+            continue;
+        }
+        let file = format!("clusters/{cluster}/{name}/");
+        if has_instances(&dir)? {
+            out.warn(
+                &file,
+                Some("§5"),
+                format!(
+                    "not read, so the instances under it are not deployed: \
+                     the instances of the env `{name}` live under `clusters/{cluster}/envs/{name}/`"
+                ),
+            );
+        } else if apps.contains_key(&name)
+            && (dir.join("app.yaml").is_file() || dir.join("values.yaml").is_file())
+        {
+            out.warn(
+                &file,
+                Some("§5"),
+                format!(
+                    "not read: the cluster×app level of `{name}` lives under `clusters/{cluster}/apps/{name}/`"
+                ),
+            );
         }
     }
     Ok(())
@@ -284,16 +309,28 @@ struct Levels<'a> {
 fn check_env(level: &Levels, env_dir: &Path, out: &mut Findings) -> io::Result<()> {
     let (cluster, env) = (level.cluster, level.env);
     for (app, app_dir) in subdirectories(env_dir)? {
+        for unread in ["app.yaml", "values.yaml"] {
+            if app_dir.join(unread).is_file() {
+                out.warn(
+                    &format!("clusters/{cluster}/envs/{env}/{app}/{unread}"),
+                    Some("§7.3"),
+                    format!(
+                        "not read: no configuration level sits between the env and the instance; \
+                         the env level of `{app}` is `envs/{env}/{app}/{unread}`"
+                    ),
+                );
+            }
+        }
         for (instance, dir) in subdirectories(&app_dir)? {
             let path = dir.join("app.yaml");
             if !path.is_file() {
                 continue;
             }
-            check_name(env, &format!("clusters/{cluster}/{env}/"), out);
-            check_name(&app, &format!("clusters/{cluster}/{env}/{app}/"), out);
+            check_name(env, &format!("clusters/{cluster}/envs/{env}/"), out);
+            check_name(&app, &format!("clusters/{cluster}/envs/{env}/{app}/"), out);
             check_name(
                 &instance,
-                &format!("clusters/{cluster}/{env}/{app}/{instance}/"),
+                &format!("clusters/{cluster}/envs/{env}/{app}/{instance}/"),
                 out,
             );
             let file = relative(level.platform, &path);

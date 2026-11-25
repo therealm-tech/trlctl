@@ -55,6 +55,16 @@ fn discovers_an_ssh_origin_as_https() {
     );
     assert!(dir.path().join("apps/.gitkeep").is_file());
     assert!(dir.path().join("envs/.gitkeep").is_file());
+    assert!(
+        dir.path()
+            .join("clusters/prod-eu-1/apps/.gitkeep")
+            .is_file()
+    );
+    assert!(
+        dir.path()
+            .join("clusters/prod-eu-1/envs/.gitkeep")
+            .is_file()
+    );
     assert_eq!(validate(dir.path(), dir.path()).unwrap(), Vec::new());
 }
 
@@ -221,6 +231,7 @@ fn platform_only_uses_origin_for_the_platform() {
         .assert()
         .success();
     assert!(!dir.path().join("apps").exists());
+    assert!(dir.path().join("clusters/c1/envs/.gitkeep").is_file());
     let yaml = read(&dir.path().join("clusters/c1/cluster.yaml"));
     assert!(yaml.contains("url: \"https://github.com/org/catalog.git\""));
     assert!(yaml.contains("url: \"https://git.example.com/org/platform.git\""));

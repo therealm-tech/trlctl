@@ -18,7 +18,8 @@ each cluster (`clusters/`). `trlctl` implements the specification in
 [`SPEC.md`](https://github.com/therealm-tech/layout-spec/blob/main/SPEC.md):
 
 - `trlctl init` creates the skeleton of a layout: `apps/`, `envs/` and a
-  cluster's `clusters/<cluster>/cluster.yaml`;
+  cluster's `clusters/<cluster>/`, with its `cluster.yaml` and its `apps/`
+  and `envs/` directories;
 - `trlctl validate` checks a layout against every rule of the specification
   that can be checked on files, and reports each violation with the file at
   fault and the section of the specification it breaks. It also warns about
@@ -150,9 +151,15 @@ section of the specification it breaks. A warning is marked as such, and names
 a section only when it relates to one:
 
 ```text
-clusters/nonprod-1/dev/whoami/default/app.yaml: §8.2: effective configuration: `revision` must not be set when `url` is not set
-clusters/nonprod-1/dev/whoami/default/app.yaml: warning: `apps/whoami/charts/whoami` does not exist in the repo catalogue: Argo CD will fail to render this source
+clusters/nonprod-1/envs/dev/whoami/default/app.yaml: §8.2: effective configuration: `revision` must not be set when `url` is not set
+clusters/nonprod-1/envs/dev/whoami/default/app.yaml: warning: `apps/whoami/charts/whoami` does not exist in the repo catalogue: Argo CD will fail to render this source
 ```
+
+Only `apps/` and `envs/` are read under `clusters/<cluster>/`. Another
+directory there is ignored, with a warning when it holds instances or a
+cluster×app `app.yaml` or `values.yaml`, since nothing of it gets deployed.
+The same goes for an `app.yaml` or a `values.yaml` in
+`clusters/<cluster>/envs/<env>/<app>/`, which is not a configuration level.
 
 In JSON, each finding carries `file`, `severity` (`error` or `warning`),
 `message`, and `section` when it has one.

@@ -41,7 +41,7 @@ spec:
     server: https://kubernetes.default.svc
     namespace: argocd
   sources:
-    - repoURL: registry.example.com/charts
+    - repoURL: ghcr.io/therealm-tech/charts
       chart: therealm-layout
       targetRevision: 0.1.0
       helm:
@@ -79,7 +79,7 @@ spec:
     server: https://kubernetes.default.svc
     namespace: argocd
   sources:
-    - repoURL: registry.example.com/charts
+    - repoURL: ghcr.io/therealm-tech/charts
       chart: therealm-layout
       targetRevision: 0.1.0
       helm:
@@ -117,7 +117,7 @@ spec:
     server: https://kubernetes.default.svc
     namespace: argocd
   sources:
-    - repoURL: registry.example.com/charts
+    - repoURL: ghcr.io/therealm-tech/charts
       chart: therealm-layout
       targetRevision: 0.1.0
       helm:

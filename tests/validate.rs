@@ -91,8 +91,8 @@ fn trlctl() -> assert_cmd::Command {
     cmd
 }
 
-const WHOAMI_DEV: &str = "clusters/nonprod-1/dev/whoami/default/app.yaml";
-const ARGOCD_PROD: &str = "clusters/mgmt-1/prod/argocd/default/app.yaml";
+const WHOAMI_DEV: &str = "clusters/nonprod-1/envs/dev/whoami/default/app.yaml";
+const ARGOCD_PROD: &str = "clusters/mgmt-1/envs/prod/argocd/default/app.yaml";
 
 #[test]
 fn the_worked_example_follows_the_specification() {
@@ -106,20 +106,66 @@ fn rejects_invalid_names() {
         "apps/Bad_App/app.yaml",
         "app:\n  path: apps/Bad_App/manifests\n",
     );
-    example.write("clusters/nonprod-1/QA/whoami/default/app.yaml", "");
+    example.write("clusters/nonprod-1/envs/QA/whoami/default/app.yaml", "");
+    example.write("clusters/nonprod-1/apps/Who_Ami/values.yaml", "");
     example.assert_finding("apps/Bad_App/", "§5", "not a valid name");
-    example.assert_finding("clusters/nonprod-1/QA/", "§5", "not a valid name");
+    example.assert_finding("clusters/nonprod-1/envs/QA/", "§5", "not a valid name");
+    example.assert_finding("clusters/nonprod-1/apps/Who_Ami/", "§5", "not a valid name");
 }
 
 #[test]
-fn rejects_an_env_named_like_an_app() {
+fn accepts_an_env_named_like_an_app() {
     let example = Example::new();
-    example.write("clusters/nonprod-1/katib/whoami/default/app.yaml", "");
-    example.assert_finding(
-        "clusters/nonprod-1/katib/",
-        "§5",
-        "must not be named like an app",
+    example.write("clusters/nonprod-1/envs/katib/whoami/default/app.yaml", "");
+    assert_eq!(example.findings(), Vec::new());
+}
+
+#[test]
+fn applies_the_cluster_app_level() {
+    let example = Example::new();
+    example.write(
+        "clusters/mgmt-1/apps/argocd/app.yaml",
+        "app:\n  path: apps/argocd/manifests\n",
     );
+    example.assert_finding(ARGOCD_PROD, "§8.2", "exactly one of `chart` and `path`");
+}
+
+#[test]
+fn ignores_other_directories_under_a_cluster() {
+    let example = Example::new();
+    example.write("clusters/nonprod-1/notes/README.md", "# notes\n");
+    example.write("clusters/nonprod-1/ghost/values.yaml", "replicas: 2\n");
+    assert_eq!(example.findings(), Vec::new());
+}
+
+#[test]
+fn warns_about_instances_outside_envs() {
+    let example = Example::new();
+    example.write("clusters/nonprod-1/qa/whoami/default/app.yaml", "");
+    example.assert_warning(
+        "clusters/nonprod-1/qa/",
+        Some("§5"),
+        "live under `clusters/nonprod-1/envs/qa/`",
+    );
+}
+
+#[test]
+fn warns_about_a_cluster_app_level_outside_apps() {
+    let example = Example::new();
+    example.write("clusters/nonprod-1/whoami/values.yaml", "replicas: 2\n");
+    example.assert_warning(
+        "clusters/nonprod-1/whoami/",
+        Some("§5"),
+        "lives under `clusters/nonprod-1/apps/whoami/`",
+    );
+}
+
+#[test]
+fn warns_about_files_between_env_and_instance() {
+    let example = Example::new();
+    let file = "clusters/nonprod-1/envs/dev/whoami/values.yaml";
+    example.write(file, "replicas: 2\n");
+    example.assert_warning(file, Some("§7.3"), "`envs/dev/whoami/values.yaml`");
 }
 
 #[test]
@@ -327,7 +373,7 @@ fn rejects_a_revision_without_url() {
         "app:\n  revision: whoami-0.1.0\n",
     );
     example.assert_finding(
-        "clusters/prod-eu-1/prod/whoami/default/app.yaml",
+        "clusters/prod-eu-1/envs/prod/whoami/default/app.yaml",
         "§8.2",
         "`revision` must not be set when `url` is not set",
     );
@@ -337,10 +383,10 @@ fn rejects_a_revision_without_url() {
 fn requires_a_git_url_and_a_revision_with_path_and_url() {
     let example = Example::new();
     example.write(
-        "clusters/nonprod-1/dev/katib/default/app.yaml",
+        "clusters/nonprod-1/envs/dev/katib/default/app.yaml",
         "app:\n  url: ghcr.io/org/charts\n",
     );
-    let file = "clusters/nonprod-1/dev/katib/default/app.yaml";
+    let file = "clusters/nonprod-1/envs/dev/katib/default/app.yaml";
     example.assert_finding(file, "§8.2", "must be a Git repository when `path` is set");
     example.assert_finding(file, "§8.2", "`path` with `url` requires `revision`");
 }
@@ -370,7 +416,7 @@ fn warns_about_a_missing_designated_directory() {
 #[test]
 fn rejects_an_app_that_is_not_in_the_catalogue() {
     let example = Example::new();
-    let file = "clusters/nonprod-1/dev/ghost/default/app.yaml";
+    let file = "clusters/nonprod-1/envs/dev/ghost/default/app.yaml";
     example.write(file, "");
     example.assert_finding(file, "§7.3", "`ghost` is not an app of the repo catalogue");
 }
@@ -378,7 +424,7 @@ fn rejects_an_app_that_is_not_in_the_catalogue() {
 #[test]
 fn rejects_a_kustomization_in_instance_manifests() {
     let example = Example::new();
-    let file = "clusters/prod-eu-1/prod/whoami/default/manifests/extra/kustomization.yaml";
+    let file = "clusters/prod-eu-1/envs/prod/whoami/default/manifests/extra/kustomization.yaml";
     example.write(file, "resources:\n  - ../pod-disruption-budget.yaml\n");
     example.assert_finding(file, "§7.3", "must not contain a kustomization file");
 }
