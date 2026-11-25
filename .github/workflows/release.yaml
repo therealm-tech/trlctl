@@ -51,20 +51,51 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - name: check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: download the archives
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: binary-*
           path: dist
           merge-multiple: true
-      - name: attest the build provenance of the archives
+      - name: name the release files
+        id: names
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          echo "sbom=trlctl-${TAG#v}.cdx.json" >> "$GITHUB_OUTPUT"
+          echo "bundle=trlctl-${TAG#v}.sigstore.json" >> "$GITHUB_OUTPUT"
+      - name: generate the SBOM
+        uses: anchore/sbom-action@dfcb83b97731532d72be422cbc51ee64adb6fd56 # v0.24.4
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: ${{ steps.names.outputs.sbom }}
+          upload-artifact: false
+      - name: attest the build provenance of the archives and checksums
+        id: attest
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: dist/*.tar.gz
-      - name: create the release with the archives
+          subject-path: dist/*
+      - name: attest the SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/*
+          sbom-path: ${{ steps.names.outputs.sbom }}
+      - name: name the attestation bundle after the release
+        env:
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+          NAME: ${{ steps.names.outputs.bundle }}
+        run: cp "$BUNDLE" "$NAME"
+      - name: create the release with the archives, the SBOM and the bundle
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          SBOM: ${{ steps.names.outputs.sbom }}
+          BUNDLE: ${{ steps.names.outputs.bundle }}
         run: |
           previous="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v" --jq '.[].ref | ltrimstr("refs/tags/")' \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
@@ -74,7 +105,7 @@ jobs:
           if [ -n "$previous" ]; then
             args+=(--notes-start-tag "$previous")
           fi
-          gh release create "$TAG" "${args[@]}" dist/*.tar.gz dist/*.tar.gz.sha256
+          gh release create "$TAG" "${args[@]}" dist/*.tar.gz dist/*.tar.gz.sha256 "$SBOM" "$BUNDLE"
 
   homebrew:
     name: Homebrew formula

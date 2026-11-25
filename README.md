@@ -53,7 +53,10 @@ cargo install --locked trlctl
 **Prebuilt archives.** Each
 [GitHub release](https://github.com/therealm-tech/trlctl/releases) carries a
 `trlctl-<version>-<target>.tar.gz` archive per target, holding the `trlctl`
-binary, the licence and this README, next to its `.sha256` checksum:
+binary, the licence and this README, next to its `.sha256` checksum. The
+release also carries its SBOM, `trlctl-<version>.cdx.json` (CycloneDX), and
+`trlctl-<version>.sigstore.json`, the Sigstore bundle of its provenance
+attestation:
 
 | Target | Platform |
 | --- | --- |
@@ -77,6 +80,18 @@ from this repository by its release workflow:
 
 ```sh
 gh attestation verify trlctl-*-x86_64-unknown-linux-musl.tar.gz --repo therealm-tech/trlctl
+```
+
+Without access to GitHub's attestation API, check it against the bundle
+attached to the release instead; that form cannot tell a renamed repository
+from the original:
+
+```sh
+gh release download --repo therealm-tech/trlctl --pattern 'trlctl-*.sigstore.json'
+```
+
+```sh
+gh attestation verify trlctl-*-x86_64-unknown-linux-musl.tar.gz --bundle trlctl-*.sigstore.json --repo therealm-tech/trlctl
 ```
 
 Extract it, then move `trlctl` from the extracted directory to a directory on

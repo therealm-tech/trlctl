@@ -159,8 +159,10 @@ workflow:
 2. **build** runs the [`build`](.github/workflows/build.yaml) workflow: the
    four archives and their checksums, and the Homebrew formula rendered from
    them;
-3. **GitHub release** attests the build provenance of the archives, then
-   creates the release with the archives and checksums. Its notes are
+3. **GitHub release** generates a CycloneDX SBOM from the lockfile, attests
+   the build provenance of the archives and checksums and the SBOM against
+   them, then creates the release with the archives, the checksums, the SBOM
+   and the Sigstore bundle of the provenance attestation. Its notes are
    generated from the pull requests merged since the previous stable tag,
    sorted into the categories of [`.github/release.yaml`](.github/release.yaml)
    by their labels;
