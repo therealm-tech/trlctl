@@ -93,7 +93,8 @@ pre-commit run cargo-clippy --all-files
 | `check-yaml`, `yamllint` | YAML syntax and style ([`.yamllint.yaml`](.yamllint.yaml)) | Edit the file |
 | `check-added-large-files`, `check-merge-conflict`, `detect-private-key` | Accidental commits | Remove the file or marker |
 | `actionlint` | GitHub Actions workflows | Edit the workflow |
-| `zizmor` | Security of the workflows and the Dependabot configuration, offline audits | Edit the workflow |
+| `zizmor` | Security of the workflows, offline audits | Edit the workflow |
+| `renovate-config-validator` | [`renovate.json`](renovate.json), migrated keys included | `npx --package renovate renovate-config-validator --strict --migrate` |
 | `cargo-fmt` | Rust formatting | `cargo fmt` |
 | `cargo-clippy` | Clippy, pedantic, warnings denied | Edit the code |
 | `shellcheck` | Shell scripts in [`scripts/`](scripts/) | Edit the script |
@@ -117,8 +118,15 @@ in branch protection; `build` is path-filtered, so it must not be one. These thr
 the code-scanning upload uses the workflow's own token and is skipped on pull
 requests from forks.
 
-[Dependabot](.github/dependabot.yaml) proposes Cargo and GitHub Actions
-updates weekly, grouping minor and patch updates.
+[Renovate](renovate.json) proposes the dependency updates: crates, action
+pins, hook revisions and dev tools, with a weekly lockfile
+refresh and security fixes as soon as an advisory lands. It runs weekly from
+the [`renovate`](.github/workflows/renovate.yaml) workflow, which also takes a
+manual run with a dry-run switch; it writes with the `RENOVATE_TOKEN` secret,
+a token whose pull requests trigger CI, which `GITHUB_TOKEN`'s do not. Its
+pull requests are read and merged by hand, never automerged, and the
+[Dependency dashboard](https://github.com/therealm-tech/trlctl/issues?q=is%3Aissue+%22Dependency+dashboard%22)
+issue lists what it holds back.
 
 ## Submitting a change
 
