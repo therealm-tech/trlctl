@@ -15,7 +15,7 @@ pub enum Scope {
     Full,
     /// The repo catalogue only: `apps/`.
     CatalogOnly,
-    /// The repo platform only: `envs/` and `clusters/`.
+    /// The repo platform only: `envs/` and `clusters/<cluster>/`.
     PlatformOnly,
 }
 
@@ -72,11 +72,8 @@ pub fn run(options: &Options, prompt: &mut impl Prompt) -> Result<Vec<PathBuf>> 
                 "{flag} `{url}` is not a Git repository URL"
             );
         }
-        let path = options
-            .dir
-            .join("clusters")
-            .join(&cluster)
-            .join("cluster.yaml");
+        let cluster_dir = options.dir.join("clusters").join(&cluster);
+        let path = cluster_dir.join("cluster.yaml");
         if path.exists() && !options.force {
             bail!(
                 "{} already exists; pass --force to overwrite it",
@@ -84,6 +81,7 @@ pub fn run(options: &Options, prompt: &mut impl Prompt) -> Result<Vec<PathBuf>> 
             );
         }
         Some((
+            cluster_dir,
             path,
             cluster_yaml(&catalog_url, &platform_url, &options.revision)?,
         ))
@@ -92,9 +90,11 @@ pub fn run(options: &Options, prompt: &mut impl Prompt) -> Result<Vec<PathBuf>> 
     if options.scope != Scope::PlatformOnly {
         files.push(keep_file(&options.dir.join("apps"))?);
     }
-    if let Some((path, content)) = cluster_file {
+    if let Some((cluster_dir, path, content)) = cluster_file {
         files.push(keep_file(&options.dir.join("envs"))?);
         files.push(Some(write(&path, &content)?));
+        files.push(keep_file(&cluster_dir.join("apps"))?);
+        files.push(keep_file(&cluster_dir.join("envs"))?);
     }
     let written: Vec<PathBuf> = files.into_iter().flatten().collect();
     info!(count = written.len(), "layout initialised");

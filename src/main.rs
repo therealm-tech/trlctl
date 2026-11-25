@@ -41,7 +41,7 @@ enum LogFormat {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Scaffold a layout: `apps/`, `envs/` and `clusters/<cluster>/cluster.yaml`
+    /// Scaffold a layout: `apps/`, `envs/` and `clusters/<cluster>/{cluster.yaml,apps/,envs/}`
     Init(InitArgs),
     /// Check a layout against the specification
     Validate(ValidateArgs),
@@ -75,7 +75,7 @@ struct InitArgs {
     #[arg(long, env = "TRLCTL_CATALOG_ONLY", conflicts_with = "platform_only")]
     catalog_only: bool,
 
-    /// Initialise the repo platform only (`envs/`, `clusters/`)
+    /// Initialise the repo platform only (`envs/`, `clusters/<cluster>/`)
     #[arg(long, env = "TRLCTL_PLATFORM_ONLY")]
     platform_only: bool,
 
