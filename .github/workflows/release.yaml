@@ -185,9 +185,12 @@ jobs:
             404) echo "published=false" >> "$GITHUB_OUTPUT" ;;
             *) echo "crates.io answered HTTP ${status}." >&2; exit 1 ;;
           esac
-      - name: install the Rust toolchain from rust-toolchain.toml
+      - name: install the Rust toolchain
         if: steps.published.outputs.published == 'false'
-        run: rustup toolchain install
+        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+        with:
+          cache: false
+          install_args: rust
       - name: authenticate with crates.io trusted publishing
         if: steps.published.outputs.published == 'false'
         id: auth
