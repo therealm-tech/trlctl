@@ -72,7 +72,7 @@ repository's `origin` remote.
 brew install therealm-tech/tap/trlctl
 ```
 
-**Cargo**, with Rust installed through [rustup](https://rustup.rs):
+**Cargo**, with Rust 1.88 or later installed through [rustup](https://rustup.rs):
 
 ```sh
 cargo install --locked trlctl

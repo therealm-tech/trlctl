@@ -32,8 +32,9 @@ pub struct Options {
 }
 
 /// Asks the user for a value the command line did not give.
+#[cfg_attr(test, mockall::automock)]
 pub trait Prompt {
-    /// The answer to `question`.
+    /// `missing_flag` is the flag the error names when no answer can be obtained.
     ///
     /// # Errors
     ///
@@ -144,7 +145,12 @@ fn cluster_yaml(catalog_url: &str, platform_url: &str, revision: &str) -> Result
 /// Creates `dir` with a `.gitkeep` so Git tracks it while it is empty. A
 /// directory that already holds anything is left as it is.
 fn keep_file(dir: &Path) -> Result<Option<PathBuf>> {
-    if dir.is_dir() && fs::read_dir(dir)?.next().is_some() {
+    if dir.is_dir()
+        && fs::read_dir(dir)
+            .with_context(|| format!("reading {}", dir.display()))?
+            .next()
+            .is_some()
+    {
         debug!(dir = %dir.display(), "directory not empty: no .gitkeep");
         return Ok(None);
     }
@@ -165,7 +171,97 @@ fn write(path: &Path, content: &str) -> Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::cluster_yaml;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::Path;
+
+    use mockall::predicate::eq;
+
+    use super::{MockPrompt, Options, Scope, cluster_yaml, keep_file, repository_urls, run};
+
+    const CATALOG: &str = "https://git.example.com/catalog.git";
+    const PLATFORM: &str = "https://git.example.com/platform.git";
+
+    fn options(dir: &Path, scope: Scope) -> Options {
+        Options {
+            dir: dir.to_path_buf(),
+            cluster: None,
+            catalog_url: None,
+            platform_url: None,
+            revision: "main".to_owned(),
+            scope,
+            force: false,
+        }
+    }
+
+    fn prompt_expecting(
+        question: &'static str,
+        flag: &'static str,
+        answer: &'static str,
+    ) -> MockPrompt {
+        let mut prompt = MockPrompt::new();
+        prompt
+            .expect_ask()
+            .with(eq(question), eq(flag))
+            .once()
+            .returning(|_, _| Ok(answer.to_owned()));
+        prompt
+    }
+
+    #[test]
+    fn prompts_for_a_missing_cluster() {
+        let dir = tempfile::tempdir().unwrap();
+        let options = Options {
+            catalog_url: Some(CATALOG.to_owned()),
+            ..options(dir.path(), Scope::Full)
+        };
+        let mut prompt = prompt_expecting("Cluster name", "--cluster", "prod");
+        run(&options, &mut prompt).unwrap();
+        assert!(dir.path().join("clusters/prod/cluster.yaml").is_file());
+    }
+
+    #[test]
+    fn platform_only_prompts_for_a_missing_platform_url() {
+        let options = Options {
+            catalog_url: Some(CATALOG.to_owned()),
+            ..options(Path::new("."), Scope::PlatformOnly)
+        };
+        let mut prompt = prompt_expecting("Platform repository URL", "--platform-url", PLATFORM);
+        let urls = repository_urls(&options, None, &mut prompt).unwrap();
+        assert_eq!(urls, (CATALOG.to_owned(), PLATFORM.to_owned()));
+    }
+
+    #[test]
+    fn platform_only_prompts_for_a_missing_catalog_url() {
+        let options = options(Path::new("."), Scope::PlatformOnly);
+        let mut prompt = prompt_expecting("Catalogue repository URL", "--catalog-url", CATALOG);
+        let urls = repository_urls(&options, Some(PLATFORM.to_owned()), &mut prompt).unwrap();
+        assert_eq!(urls, (CATALOG.to_owned(), PLATFORM.to_owned()));
+    }
+
+    #[test]
+    fn prompts_for_a_missing_catalog_url() {
+        let options = options(Path::new("."), Scope::Full);
+        let mut prompt = prompt_expecting("Catalogue repository URL", "--catalog-url", CATALOG);
+        let urls = repository_urls(&options, None, &mut prompt).unwrap();
+        assert_eq!(urls, (CATALOG.to_owned(), CATALOG.to_owned()));
+    }
+
+    #[test]
+    fn names_the_directory_it_cannot_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let set_mode = |mode| {
+            fs::set_permissions(dir.path(), fs::Permissions::from_mode(mode)).unwrap();
+        };
+        set_mode(0o000);
+        let result = keep_file(dir.path());
+        set_mode(0o700);
+        let error = result.unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!("reading {}", dir.path().display())
+        );
+    }
 
     #[test]
     fn quotes_every_value() {

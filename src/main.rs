@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use anyhow::{Result, bail};
+use clap::builder::BoolishValueParser;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use tracing_subscriber::EnvFilter;
 
@@ -72,15 +73,15 @@ struct InitArgs {
     revision: String,
 
     /// Initialise the repo catalogue only (`apps/`)
-    #[arg(long, env = "TRLCTL_CATALOG_ONLY", conflicts_with = "platform_only")]
+    #[arg(long, env = "TRLCTL_CATALOG_ONLY", value_parser = BoolishValueParser::new(), conflicts_with = "platform_only")]
     catalog_only: bool,
 
     /// Initialise the repo platform only (`envs/`, `clusters/<cluster>/`)
-    #[arg(long, env = "TRLCTL_PLATFORM_ONLY")]
+    #[arg(long, env = "TRLCTL_PLATFORM_ONLY", value_parser = BoolishValueParser::new())]
     platform_only: bool,
 
     /// Overwrite an existing `cluster.yaml`
-    #[arg(long, env = "TRLCTL_FORCE")]
+    #[arg(long, env = "TRLCTL_FORCE", value_parser = BoolishValueParser::new())]
     force: bool,
 }
 
