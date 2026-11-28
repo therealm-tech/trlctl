@@ -13,38 +13,28 @@ Built and maintained by [THEREALM](https://therealm.tech).
 
 ## Description
 
-The [therealm Argo CD layout](https://github.com/therealm-tech/layout-spec)
-specifies where the files describing Argo CD deployments live: a catalogue of
-apps (`apps/`), environment overrides (`envs/`) and the instances deployed on
-each cluster (`clusters/`). `trlctl` implements the specification in
-[`SPEC.md`](https://github.com/therealm-tech/layout-spec/blob/main/SPEC.md):
+`trlctl` implements the
+[therealm Argo CD layout specification](https://github.com/therealm-tech/layout-spec/blob/main/SPEC.md),
+which says where the files describing Argo CD deployments live.
 
-- `trlctl init` creates the skeleton of a layout: `apps/`, `envs/` and a
-  cluster's `clusters/<cluster>/`, with its `cluster.yaml` and its `apps/`
-  and `envs/` directories;
+- `trlctl init` creates a layout's skeleton, with a cluster's `cluster.yaml`;
 - `trlctl validate` checks a layout against every rule of the specification
-  that can be checked on files, and reports each violation with the file at
-  fault and the section of the specification it breaks. It also warns about
-  what the specification allows but Argo CD would fail on.
+  that can be checked on files, and warns about what Argo CD would fail on.
 
-`trlctl` works offline, on local checkouts. It does not render the layout into
-Argo CD objects, talk to Argo CD or a cluster, or fetch the repositories a
-`cluster.yaml` names.
+It works offline, on local checkouts: it does not render Argo CD objects, talk
+to a cluster, or fetch the repositories a `cluster.yaml` names. See
+[ARCHITECTURE.md](ARCHITECTURE.md) for the design and the reasoning behind it.
 
 ## The need
 
-A platform team keeps its Argo CD deployments in Git, laid out as the
-specification describes: an app's defaults in `apps/`, an environment's
-overrides in `envs/`, and the instances each cluster runs in `clusters/`. Every
-change to that tree adds, moves or edits files whose place decides what gets
-deployed, and where.
-
-Without a checker, the rules live in reviewers' heads. A `values.yaml` one
-level off, an `app.yaml` setting `revision` without `url`, or a source path
-pointing at a chart that does not exist all look fine in a diff. They surface
-later: as an app Argo CD fails to render once the change is merged, or as an
-override that silently never applies. Starting a new cluster means copying
-another one's directory and editing its repository URLs by hand.
+A platform team reviews pull requests on its GitOps repository, where a file's
+place decides what gets deployed, and where. Without a checker, the rules live
+in reviewers' heads. A `values.yaml` one level off, an `app.yaml` setting
+`revision` without `url`, or a source path pointing at a chart that does not
+exist all look fine in a diff. They surface after the merge: as an app Argo CD
+fails to render, or as an override that silently never applies. Starting a new
+cluster means copying another one's directory and editing its repository URLs
+by hand.
 
 `trlctl validate` runs the specification's checks on the files, before the
 merge. Each finding names the file and the section it breaks, and the command
@@ -62,7 +52,8 @@ repository's `origin` remote.
 ### Prerequisites
 
 - macOS or Linux, on arm64 or x86-64;
-- Git, which `trlctl init` uses to read the repository's `origin` remote.
+- Git, optional: `trlctl init` reads the repository's `origin` remote with
+  it, and `trlctl validate` checks `repo.platform` against the checkout.
 
 ### Installation
 
@@ -84,30 +75,41 @@ cargo install --locked trlctl
 binary, the licence and this README, next to its `.sha256` checksum. The
 release also carries its SBOM, `trlctl-<version>.cdx.json` (CycloneDX), and
 `trlctl-<version>.sigstore.json`, the Sigstore bundle of its provenance
-attestation:
+attestation. The Linux binaries are static (musl), so they run on any
+distribution:
 
 | Target | Platform |
 | --- | --- |
 | `aarch64-apple-darwin` | macOS, Apple silicon |
 | `x86_64-apple-darwin` | macOS, Intel |
-| `aarch64-unknown-linux-musl` | Linux, arm64, static musl binary |
-| `x86_64-unknown-linux-musl` | Linux, x86-64, static musl binary |
+| `aarch64-unknown-linux-musl` | Linux, arm64 |
+| `x86_64-unknown-linux-musl` | Linux, x86-64 |
 
-The Linux archives are static musl binaries: they run on any distribution,
-whatever its libc.
+Set `TARGET` to your platform's target from the table, for instance:
 
-Download the latest archive with the [GitHub CLI](https://cli.github.com),
-here for Linux on x86-64:
+**macOS**, Apple silicon:
 
 ```sh
-gh release download --repo therealm-tech/trlctl --pattern 'trlctl-*-x86_64-unknown-linux-musl.tar.gz'
+TARGET=aarch64-apple-darwin
+```
+
+**Linux**, x86-64:
+
+```sh
+TARGET=x86_64-unknown-linux-musl
+```
+
+Download the latest archive with the [GitHub CLI](https://cli.github.com):
+
+```sh
+gh release download --repo therealm-tech/trlctl --pattern "trlctl-*-${TARGET}.tar.gz"
 ```
 
 Verify its build provenance attestation, which proves the archive was built
 from this repository by its release workflow:
 
 ```sh
-gh attestation verify trlctl-*-x86_64-unknown-linux-musl.tar.gz --repo therealm-tech/trlctl
+gh attestation verify trlctl-*-"${TARGET}".tar.gz --repo therealm-tech/trlctl
 ```
 
 Without access to GitHub's attestation API, check it against the bundle
@@ -119,14 +121,23 @@ gh release download --repo therealm-tech/trlctl --pattern 'trlctl-*.sigstore.jso
 ```
 
 ```sh
-gh attestation verify trlctl-*-x86_64-unknown-linux-musl.tar.gz --bundle trlctl-*.sigstore.json --repo therealm-tech/trlctl
+gh attestation verify trlctl-*-"${TARGET}".tar.gz --bundle trlctl-*.sigstore.json --repo therealm-tech/trlctl
 ```
 
-Extract it, then move `trlctl` from the extracted directory to a directory on
-your `PATH`:
+Extract it into `trlctl-<version>-<target>/`:
 
 ```sh
-tar -xzf trlctl-*-x86_64-unknown-linux-musl.tar.gz
+tar -xzf trlctl-*-"${TARGET}".tar.gz
+```
+
+Install `trlctl` into a directory on your `PATH`, here `~/.local/bin`:
+
+```sh
+mkdir -p ~/.local/bin
+```
+
+```sh
+install -m 0755 trlctl-*-"${TARGET}"/trlctl ~/.local/bin/
 ```
 
 ### Configuration
@@ -134,21 +145,24 @@ tar -xzf trlctl-*-x86_64-unknown-linux-musl.tar.gz
 Every option is also read from an environment variable; a command-line flag
 takes precedence over the variable.
 
-| Variable | Flag | Default | Description |
-| --- | --- | --- | --- |
-| `TRLCTL_DIR` | `init --dir` | `.` | Directory to initialise |
-| `TRLCTL_CLUSTER` | `init --cluster` | prompted | Name of the cluster to create |
-| `TRLCTL_CATALOG_URL` | `init --catalog-url` | `origin` remote, else prompted | URL of the repository holding the repo catalogue |
-| `TRLCTL_PLATFORM_URL` | `init --platform-url` | the catalogue URL | URL of the repository holding the repo platform |
-| `TRLCTL_REVISION` | `init --revision` | `main` | Revision both repositories are read at |
-| `TRLCTL_CATALOG_ONLY` | `init --catalog-only` | `false` | Create the repo catalogue only (`apps/`) |
-| `TRLCTL_PLATFORM_ONLY` | `init --platform-only` | `false` | Create the repo platform only (`envs/`, `clusters/`) |
-| `TRLCTL_FORCE` | `init --force` | `false` | Overwrite an existing `cluster.yaml` |
-| `TRLCTL_CATALOG` | `validate --catalog` | `.` | Layout root of the repo catalogue |
-| `TRLCTL_PLATFORM` | `validate --platform` | `.` | Layout root of the repo platform |
-| `TRLCTL_OUTPUT` | `validate --output` | `human` | Format of the findings: `human` or `json` |
-| `TRLCTL_LOG_FILTER` | `--log-filter` | `warn` | Filter of the diagnostics on stderr, e.g. `trlctl=debug` |
-| `TRLCTL_LOG_FORMAT` | `--log-format` | `text` | Format of the diagnostics: `text` or `json` |
+| Variable | Flag | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `TRLCTL_DIR` | `init --dir` | no | `.` | Directory to initialise |
+| `TRLCTL_CLUSTER` | `init --cluster` | when stdin is not a terminal, except with `--catalog-only` | prompted | Name of the cluster to create |
+| `TRLCTL_CATALOG_URL` | `init --catalog-url` | no | `origin` remote, else prompted; with `--platform-only`, prompted | URL of the repository holding the repo catalogue |
+| `TRLCTL_PLATFORM_URL` | `init --platform-url` | no | the catalogue URL; with `--platform-only`, `origin` remote, else prompted | URL of the repository holding the repo platform |
+| `TRLCTL_REVISION` | `init --revision` | no | `main` | Revision both repositories are read at |
+| `TRLCTL_CATALOG_ONLY` | `init --catalog-only` | no | `false` | Create the repo catalogue only (`apps/`) |
+| `TRLCTL_PLATFORM_ONLY` | `init --platform-only` | no | `false` | Create the repo platform only (`envs/`, `clusters/`) |
+| `TRLCTL_FORCE` | `init --force` | no | `false` | Overwrite an existing `cluster.yaml` |
+| `TRLCTL_CATALOG` | `validate --catalog` | no | `.` | Layout root of the repo catalogue |
+| `TRLCTL_PLATFORM` | `validate --platform` | no | `.` | Layout root of the repo platform |
+| `TRLCTL_OUTPUT` | `validate --output` | no | `human` | Format of the findings: `human` or `json` |
+| `TRLCTL_LOG_FILTER` | `--log-filter` | no | `warn` | Filter of the diagnostics on stderr, e.g. `trlctl=debug` |
+| `TRLCTL_LOG_FORMAT` | `--log-format` | no | `text` | Format of the diagnostics: `text` or `json` |
+
+A *prompted* value is asked for when stdin is a terminal; otherwise, without
+its flag or variable, `trlctl init` fails.
 
 ### Usage
 
@@ -160,13 +174,13 @@ trlctl init --cluster prod-eu-1
 ```
 
 The repository URL comes from the `origin` remote, converted to `https://`
-(`git@github.com:org/gitops.git` becomes `https://github.com/org/gitops.git`).
-Without a remote and without `--catalog-url`, `trlctl` asks for it when run
-in a terminal, and fails otherwise. An existing `cluster.yaml` is never
+(`git@github.com:org/gitops.git` becomes `https://github.com/org/gitops.git`),
+and is prompted for without one. An existing `cluster.yaml` is never
 overwritten without `--force`.
 
 When the repo catalogue and the repo platform live in separate repositories,
-initialise each one on its own:
+initialise each one on its own. With `--platform-only`, `origin` gives the
+platform URL only: the catalogue URL comes from `--catalog-url` or the prompt.
 
 ```sh
 trlctl init --catalog-only
@@ -198,12 +212,6 @@ clusters/nonprod-1/envs/dev/whoami/default/app.yaml: §8.2: effective configurat
 clusters/nonprod-1/envs/dev/whoami/default/app.yaml: warning: `apps/whoami/charts/whoami` does not exist in the repo catalogue: Argo CD will fail to render this source
 ```
 
-Only `apps/` and `envs/` are read under `clusters/<cluster>/`. Another
-directory there is ignored, with a warning when it holds instances or a
-cluster×app `app.yaml` or `values.yaml`, since nothing of it gets deployed.
-The same goes for an `app.yaml` or a `values.yaml` in
-`clusters/<cluster>/envs/<env>/<app>/`, which is not a configuration level.
-
 In JSON, each finding carries `file`, `severity` (`error` or `warning`),
 `message`, and `section` when it has one.
 
@@ -215,12 +223,9 @@ In JSON, each finding carries `file`, `severity` (`error` or `warning`),
 | `1` | `validate` found at least one violation |
 | `2` | Usage error, unreadable file, or `init` refused to write |
 
-When the repo platform is a Git checkout, `validate` also checks that
-`repo.platform` in each `cluster.yaml` designates that checkout. The layout
-root's path inside it must match; an `origin` remote that designates another
-repository is only a warning, since a fork or a mirror has its own. URLs are
-compared once normalised, so `git@host:org/repo.git` and
-`https://host/org/repo` designate the same repository.
+What `validate` reads, how it builds each instance's effective
+configuration, and which checks depend on Git are described in
+[ARCHITECTURE.md](ARCHITECTURE.md#validate).
 
 ## Contributing
 
