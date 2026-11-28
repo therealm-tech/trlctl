@@ -19,7 +19,6 @@ use crate::urls::{
 use config::{Loaded, STRING_FIELDS, app_mapping, cluster_repos, is_set, load, merge};
 use source::{KUSTOMIZATION_FILES, check_catalogue_source};
 
-/// How serious a finding is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
@@ -30,23 +29,19 @@ pub enum Severity {
     Warning,
 }
 
-/// One problem `validate` found in a repository.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct Finding {
     /// The file or directory at fault, relative to its layout root.
     pub file: String,
-    /// Whether the finding breaks the specification or only warns.
     pub severity: Severity,
     /// The section of the specification it relates to, e.g. `§8.2`; `None`
     /// for a warning the specification says nothing about.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub section: Option<String>,
-    /// What is wrong.
     pub message: String,
 }
 
 impl Finding {
-    /// Whether the finding breaks the specification.
     #[must_use]
     pub fn is_error(&self) -> bool {
         self.severity == Severity::Error
@@ -185,7 +180,7 @@ fn check_clusters(
     Ok(())
 }
 
-/// SPEC.md §5: only `apps/` and `envs/` are read under `clusters/<cluster>/`.
+/// Layout specification §5: only `apps/` and `envs/` are read under `clusters/<cluster>/`.
 /// Any other directory is ignored, but one holding instances or a
 /// cluster×app file is almost certainly misplaced, so it gets a warning.
 fn check_unread_directories(
@@ -253,7 +248,7 @@ fn check_cluster_file(platform: &Path, cluster_dir: &Path, out: &mut Findings) -
     Ok(())
 }
 
-/// SPEC.md §9: `repo.platform` designates the repository and layout root
+/// Layout specification §9: `repo.platform` designates the repository and layout root
 /// holding the `cluster.yaml`. Checkable only when `platform` is in a Git
 /// checkout, and the URL only when that checkout has an `origin` remote. A
 /// URL mismatch is only a warning: a fork or a mirror has another `origin`.

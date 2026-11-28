@@ -1,4 +1,4 @@
-/// Whether `name` is a lowercase DNS label as SPEC.md §5 requires for
+/// Whether `name` is a lowercase DNS label as the layout specification §5 requires for
 /// `<app>`, `<env>`, `<cluster>` and `<instance>`.
 #[must_use]
 pub fn is_valid_name(name: &str) -> bool {

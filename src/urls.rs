@@ -1,7 +1,7 @@
 use url::Url;
 
 /// Whether `url` is a Git repository URL in a form Argo CD accepts
-/// (SPEC.md §8.2): `http(s)://`, `ssh://`, `git://`, or scp-like `user@host:path`.
+/// (layout specification §8.2): `http(s)://`, `ssh://`, `git://`, or scp-like `user@host:path`.
 #[must_use]
 pub fn is_git_url(url: &str) -> bool {
     if let Ok(parsed) = Url::parse(url) {
@@ -13,7 +13,7 @@ pub fn is_git_url(url: &str) -> bool {
 }
 
 /// Whether `url` designates a Helm chart repository (`http(s)://`) or an OCI
-/// registry written without a scheme (`host/path`), as SPEC.md §8.2 requires
+/// registry written without a scheme (`host/path`), as the layout specification §8.2 requires
 /// when `chart` is set.
 #[must_use]
 pub fn is_chart_repository_url(url: &str) -> bool {

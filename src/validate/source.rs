@@ -10,7 +10,7 @@ use tracing::debug;
 use super::config::{Loaded, load};
 use super::{Findings, entries, is_dir, is_file, relative, unreadable};
 
-/// The file names that make a directory a Kustomize source (SPEC.md §8.3).
+/// The file names that make a directory a Kustomize source (layout specification §8.3).
 pub(super) const KUSTOMIZATION_FILES: [&str; 3] =
     ["kustomization.yaml", "kustomization.yml", "Kustomization"];
 
@@ -19,7 +19,7 @@ static JSONNET_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 /// Checks the source a `path` with no `url` designates in the repo catalogue
-/// (SPEC.md §8.2, §8.3). `file` is the instance `app.yaml` the effective
+/// (layout specification §8.2, §8.3). `file` is the instance `app.yaml` the effective
 /// configuration belongs to.
 pub(super) fn check_catalogue_source(
     catalog: &Path,
