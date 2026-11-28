@@ -116,6 +116,7 @@ fn trlctl() -> assert_cmd::Command {
 
 const WHOAMI_DEV: &str = "clusters/nonprod-1/envs/dev/whoami/default/app.yaml";
 const ARGOCD_PROD: &str = "clusters/mgmt-1/envs/prod/argocd/default/app.yaml";
+const ARGOCD_CLUSTER: &str = "clusters/mgmt-1/apps/argocd/app.yaml";
 
 #[test]
 fn the_worked_example_follows_the_specification() {
@@ -408,10 +409,58 @@ fn requires_one_source_in_the_effective_configuration() {
 }
 
 #[test]
-fn a_null_value_does_not_override() {
+fn a_null_removes_the_value_of_a_less_specific_level() {
     let example = Example::new();
-    example.write(ARGOCD_PROD, "app:\n  chart: null\n  namespace: ~\n");
+    example.write(ARGOCD_PROD, "app:\n  chart: null\n");
+    example.assert_finding(ARGOCD_PROD, "§8.2", "exactly one of `chart` and `path`");
+}
+
+#[test]
+fn a_more_specific_level_sets_a_removed_value_again() {
+    let example = Example::new();
+    example.write(ARGOCD_CLUSTER, "app:\n  chart: null\n");
+    example.write(ARGOCD_PROD, "app:\n  chart: argo-cd\n");
     assert_eq!(example.findings(), Vec::new());
+}
+
+#[test]
+fn a_level_turns_a_chart_app_into_a_path_app() {
+    let example = Example::new();
+    example.write(
+        ARGOCD_PROD,
+        "app:\n  chart: null\n  url: null\n  revision: null\n  path: apps/argocd/manifests\n",
+    );
+    example.write("apps/argocd/manifests/namespace.yaml", "kind: Namespace\n");
+    assert_eq!(example.findings(), Vec::new());
+}
+
+#[test]
+fn a_null_app_discards_the_less_specific_levels() {
+    let example = Example::new();
+    example.write(ARGOCD_CLUSTER, "app: null\n");
+    example.assert_finding(ARGOCD_PROD, "§8.2", "exactly one of `chart` and `path`");
+
+    example.write(
+        ARGOCD_PROD,
+        "app:\n  url: ghcr.io/argoproj/argo-helm\n  chart: argo-cd\n  revision: 10.11.6\n",
+    );
+    assert_eq!(example.findings(), Vec::new());
+}
+
+#[test]
+fn an_app_key_without_a_value_is_null() {
+    let example = Example::new();
+    example.write(ARGOCD_CLUSTER, "app:\n");
+    example.assert_finding(ARGOCD_PROD, "§8.2", "exactly one of `chart` and `path`");
+}
+
+#[test]
+fn a_level_without_content_discards_nothing() {
+    let example = Example::new();
+    for content in ["", "# no override\n", "{}\n", "app: {}\n"] {
+        example.write(ARGOCD_CLUSTER, content);
+        assert_eq!(example.findings(), Vec::new(), "{content:?}");
+    }
 }
 
 #[test]

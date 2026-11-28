@@ -16,7 +16,7 @@ use crate::names::is_valid_name;
 use crate::urls::{
     is_chart_repository_url, is_git_url, same_repository, to_https, without_credentials,
 };
-use config::{Loaded, STRING_FIELDS, app_mapping, cluster_repos, is_set, load, merge};
+use config::{AppLevel, Loaded, STRING_FIELDS, app_level, cluster_repos, effective, is_set, load};
 use source::{KUSTOMIZATION_FILES, check_catalogue_source};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -86,7 +86,7 @@ pub fn validate(catalog: &Path, platform: &Path) -> Result<Vec<Finding>> {
     Ok(out.0.into_iter().collect())
 }
 
-fn load_catalogue(catalog: &Path, out: &mut Findings) -> Result<BTreeMap<String, Mapping>> {
+fn load_catalogue(catalog: &Path, out: &mut Findings) -> Result<BTreeMap<String, AppLevel>> {
     let mut apps = BTreeMap::new();
     let apps_dir = catalog.join("apps");
     if !is_dir(&apps_dir)? {
@@ -102,7 +102,8 @@ fn load_catalogue(catalog: &Path, out: &mut Findings) -> Result<BTreeMap<String,
         let file = relative(catalog, &path);
         check_name(&name, &format!("apps/{name}/"), out);
         let app = app_file(&path, &file, out)?;
-        let sources = ["chart", "path"].iter().filter(|f| is_set(&app, f)).count();
+        let own = effective([&app]);
+        let sources = ["chart", "path"].iter().filter(|f| is_set(&own, f)).count();
         if sources != 1 {
             out.push(
                 &file,
@@ -116,7 +117,7 @@ fn load_catalogue(catalog: &Path, out: &mut Findings) -> Result<BTreeMap<String,
     Ok(apps)
 }
 
-fn load_envs(platform: &Path, out: &mut Findings) -> Result<BTreeMap<(String, String), Mapping>> {
+fn load_envs(platform: &Path, out: &mut Findings) -> Result<BTreeMap<(String, String), AppLevel>> {
     let mut envs = BTreeMap::new();
     for (env, env_dir) in subdirectories(&platform.join("envs"))? {
         check_name(&env, &format!("envs/{env}/"), out);
@@ -127,8 +128,8 @@ fn load_envs(platform: &Path, out: &mut Findings) -> Result<BTreeMap<(String, St
                 debug!(dir = %dir.display(), "no env level: no app.yaml");
                 continue;
             }
-            let mapping = app_file(&path, &relative(platform, &path), out)?;
-            envs.insert((env.clone(), app), mapping);
+            let level = app_file(&path, &relative(platform, &path), out)?;
+            envs.insert((env.clone(), app), level);
         }
     }
     Ok(envs)
@@ -137,8 +138,8 @@ fn load_envs(platform: &Path, out: &mut Findings) -> Result<BTreeMap<(String, St
 fn check_clusters(
     catalog: &Path,
     platform: &Path,
-    apps: &BTreeMap<String, Mapping>,
-    envs: &BTreeMap<(String, String), Mapping>,
+    apps: &BTreeMap<String, AppLevel>,
+    envs: &BTreeMap<(String, String), AppLevel>,
     out: &mut Findings,
 ) -> Result<()> {
     let clusters_dir = platform.join("clusters");
@@ -186,7 +187,7 @@ fn check_clusters(
 fn check_unread_directories(
     cluster: &str,
     cluster_dir: &Path,
-    apps: &BTreeMap<String, Mapping>,
+    apps: &BTreeMap<String, AppLevel>,
     out: &mut Findings,
 ) -> Result<()> {
     for (name, dir) in subdirectories(cluster_dir)? {
@@ -299,9 +300,9 @@ fn check_platform_repository(
 struct Levels<'a> {
     catalog: &'a Path,
     platform: &'a Path,
-    apps: &'a BTreeMap<String, Mapping>,
-    envs: &'a BTreeMap<(String, String), Mapping>,
-    cluster_apps: &'a BTreeMap<String, Mapping>,
+    apps: &'a BTreeMap<String, AppLevel>,
+    envs: &'a BTreeMap<(String, String), AppLevel>,
+    cluster_apps: &'a BTreeMap<String, AppLevel>,
     cluster: &'a str,
     env: &'a str,
 }
@@ -345,18 +346,14 @@ fn check_env(level: &Levels, env_dir: &Path, out: &mut Findings) -> Result<()> {
                 );
                 continue;
             };
-            let mut effective = catalogue.clone();
-            for above in [
+            let levels = [
+                Some(catalogue),
                 level.envs.get(&(env.to_owned(), app.clone())),
                 level.cluster_apps.get(&app),
                 Some(&own),
-            ]
-            .into_iter()
-            .flatten()
-            {
-                merge(&mut effective, above);
-            }
-            check_effective(level.catalog, &app, &effective, &file, out)?;
+            ];
+            let config = effective(levels.into_iter().flatten());
+            check_effective(level.catalog, &app, &config, &file, out)?;
         }
     }
     Ok(())
@@ -472,14 +469,14 @@ fn check_instance_manifests(platform: &Path, dir: &Path, out: &mut Findings) -> 
     Ok(())
 }
 
-fn app_file(path: &Path, file: &str, out: &mut Findings) -> Result<Mapping> {
+fn app_file(path: &Path, file: &str, out: &mut Findings) -> Result<AppLevel> {
     Ok(match load(path)? {
-        Loaded::Missing => Mapping::new(),
+        Loaded::Missing => AppLevel::nothing(),
         Loaded::Unparsable(error) => {
             out.push(file, "§8.1", format!("unparsable YAML: {error}"));
-            Mapping::new()
+            AppLevel::nothing()
         }
-        Loaded::Value(value) => app_mapping(&value, file, out),
+        Loaded::Value(value) => app_level(&value, file, out),
     })
 }
 
