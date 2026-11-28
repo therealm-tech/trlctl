@@ -2,12 +2,14 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+use anyhow::{Context, Result};
 use serde_yaml_ng::{Mapping, Value};
+use tracing::debug;
 
-use super::Findings;
+use super::{Findings, unreadable};
 use crate::urls::{is_git_url, without_credentials};
 
-/// The `app.yaml` fields whose type is a string (SPEC.md §8.1).
+/// The `app.yaml` fields whose type is a string (layout specification §8.1).
 pub(super) const STRING_FIELDS: [&str; 6] =
     ["url", "chart", "path", "revision", "project", "namespace"];
 
@@ -17,23 +19,33 @@ pub(super) enum Loaded {
     Value(Value),
 }
 
-pub(super) fn load(path: &Path) -> io::Result<Loaded> {
+pub(super) fn load(path: &Path) -> Result<Loaded> {
     let text = match fs::read_to_string(path) {
         Ok(text) => text,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Loaded::Missing),
-        Err(error) => return Err(error),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            debug!(path = %path.display(), "YAML file missing");
+            return Ok(Loaded::Missing);
+        }
+        Err(error) => return Err(error).with_context(|| unreadable(path)),
     };
     if text.trim().is_empty() {
+        debug!(path = %path.display(), "YAML file empty");
         return Ok(Loaded::Value(Value::Null));
     }
     Ok(match serde_yaml_ng::from_str(&text) {
-        Ok(value) => Loaded::Value(value),
-        Err(error) => Loaded::Unparsable(error.to_string()),
+        Ok(value) => {
+            debug!(path = %path.display(), "YAML file loaded");
+            Loaded::Value(value)
+        }
+        Err(error) => {
+            debug!(path = %path.display(), %error, "YAML file unparsable");
+            Loaded::Unparsable(error.to_string())
+        }
     })
 }
 
 /// The `app` mapping of an `app.yaml` document, after reporting what breaks
-/// SPEC.md §8.1. A document that contributes nothing yields an empty mapping.
+/// the layout specification §8.1. A document that contributes nothing yields an empty mapping.
 pub(super) fn app_mapping(value: &Value, file: &str, out: &mut Findings) -> Mapping {
     let root = match value {
         Value::Null => return Mapping::new(),
@@ -112,7 +124,7 @@ fn check_field_types(app: &Mapping, file: &str, out: &mut Findings) {
     }
 }
 
-/// Overrides `base` with `over` as SPEC.md §10.2 describes: mappings combine
+/// Overrides `base` with `over` as the layout specification §10.2 describes: mappings combine
 /// key by key, anything else set replaces, and a null value is not set.
 pub(super) fn merge(base: &mut Mapping, over: &Mapping) {
     for (key, value) in over {
@@ -141,7 +153,7 @@ fn without_nulls(value: &Value) -> Value {
     }
 }
 
-/// Whether `field` is set in `app`: present with a non-null value (SPEC.md §3).
+/// Whether `field` is set in `app`: present with a non-null value (layout specification §3).
 pub(super) fn is_set(app: &Mapping, field: &str) -> bool {
     app.get(field).is_some_and(|value| !value.is_null())
 }
@@ -152,7 +164,7 @@ pub(super) struct ClusterRepos {
 }
 
 /// The repositories a `cluster.yaml` names, after reporting what breaks
-/// SPEC.md §9. `None` when the platform repository cannot be read from it.
+/// the layout specification §9. `None` when the platform repository cannot be read from it.
 pub(super) fn cluster_repos(value: &Value, file: &str, out: &mut Findings) -> Option<ClusterRepos> {
     let Value::Mapping(root) = value else {
         out.push(
@@ -215,7 +227,7 @@ fn check_role(repo: &Mapping, role: &str, file: &str, out: &mut Findings) -> Opt
             file,
             "§9",
             format!(
-                "`repo.{role}.url` `{}` is not a Git repository URL (Section 8.2)",
+                "`repo.{role}.url` `{}` is not a Git repository URL (§8.2)",
                 without_credentials(url)
             ),
         );

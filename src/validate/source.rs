@@ -1,15 +1,16 @@
 use std::fs;
-use std::io;
 use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
 
+use anyhow::{Context, Result};
 use regex::Regex;
 use serde_yaml_ng::Value;
+use tracing::debug;
 
 use super::config::{Loaded, load};
-use super::{Findings, relative};
+use super::{Findings, entries, is_dir, is_file, relative, unreadable};
 
-/// The file names that make a directory a Kustomize source (SPEC.md §8.3).
+/// The file names that make a directory a Kustomize source (layout specification §8.3).
 pub(super) const KUSTOMIZATION_FILES: [&str; 3] =
     ["kustomization.yaml", "kustomization.yml", "Kustomization"];
 
@@ -18,7 +19,7 @@ static JSONNET_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 /// Checks the source a `path` with no `url` designates in the repo catalogue
-/// (SPEC.md §8.2, §8.3). `file` is the instance `app.yaml` the effective
+/// (layout specification §8.2, §8.3). `file` is the instance `app.yaml` the effective
 /// configuration belongs to.
 pub(super) fn check_catalogue_source(
     catalog: &Path,
@@ -26,7 +27,7 @@ pub(super) fn check_catalogue_source(
     path: &str,
     file: &str,
     out: &mut Findings,
-) -> io::Result<()> {
+) -> Result<()> {
     let manifests = format!("apps/{app}/manifests");
     let charts = format!("apps/{app}/charts/");
     let is_chart = path
@@ -44,7 +45,7 @@ pub(super) fn check_catalogue_source(
         return Ok(());
     }
     let dir = catalog.join(path);
-    if !dir.is_dir() {
+    if !is_dir(&dir)? {
         out.warn(
             file,
             None,
@@ -56,7 +57,7 @@ pub(super) fn check_catalogue_source(
     if is_chart {
         check_chart_dependencies(catalog, &app_dir, &dir, out)?;
     } else {
-        if dir.join("Chart.yaml").is_file() {
+        if is_file(&dir.join("Chart.yaml"))? {
             out.push(
                 &relative(catalog, &dir.join("Chart.yaml")),
                 "§8.3",
@@ -73,7 +74,7 @@ fn check_kustomization(
     app_dir: &Path,
     dir: &Path,
     out: &mut Findings,
-) -> io::Result<()> {
+) -> Result<()> {
     for name in KUSTOMIZATION_FILES {
         let path = dir.join(name);
         let file = relative(catalog, &path);
@@ -112,9 +113,10 @@ fn check_chart_dependencies(
     app_dir: &Path,
     chart_dir: &Path,
     out: &mut Findings,
-) -> io::Result<()> {
+) -> Result<()> {
     let path = chart_dir.join("Chart.yaml");
     let Loaded::Value(chart) = load(&path)? else {
+        debug!(path = %path.display(), "Chart.yaml missing or unparsable: chart dependencies not checked");
         return Ok(());
     };
     let Some(Value::Sequence(dependencies)) = chart.get("dependencies") else {
@@ -142,10 +144,10 @@ fn check_jsonnet_imports(
     app_dir: &Path,
     dir: &Path,
     out: &mut Findings,
-) -> io::Result<()> {
-    for entry in fs::read_dir(dir)? {
-        let path = entry?.path();
-        if path.is_dir() {
+) -> Result<()> {
+    for entry in entries(dir)? {
+        let path = entry.path();
+        if is_dir(&path)? {
             check_jsonnet_imports(catalog, app_dir, &path, out)?;
             continue;
         }
@@ -155,7 +157,8 @@ fn check_jsonnet_imports(
         if !is_jsonnet {
             continue;
         }
-        let text = fs::read_to_string(&path)?;
+        let text = fs::read_to_string(&path).with_context(|| unreadable(&path))?;
+        debug!(path = %path.display(), "checking jsonnet imports");
         let file_dir = path.parent().unwrap_or(dir);
         for captures in JSONNET_IMPORT.captures_iter(&text) {
             let Some(import) = captures.get(1).or_else(|| captures.get(2)) else {

@@ -221,7 +221,7 @@ In JSON, each finding carries `file`, `severity` (`error` or `warning`),
 | --- | --- |
 | `0` | Success; for `validate`, the layout follows the specification, warnings or not |
 | `1` | `validate` found at least one violation |
-| `2` | Usage error, unreadable file, or `init` refused to write |
+| `2` | Usage error, unreadable file or directory, or `init` refused to write |
 
 What `validate` reads, how it builds each instance's effective
 configuration, and which checks depend on Git are described in

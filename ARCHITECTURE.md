@@ -63,7 +63,7 @@ they test.
   deterministic and a problem reached from several instances is reported once.
 - **[`src/validate/config.rs`](src/validate/config.rs)** — the configuration
   files: loading YAML (missing, unparsable or parsed), the shape and field
-  types of an `app.yaml` (SPEC.md §8.1), the override of one level by the next
+  types of an `app.yaml` (§8.1), the override of one level by the next
   (§10.2), and the repositories a `cluster.yaml` names (§9).
 - **[`src/validate/source.rs`](src/validate/source.rs)** — the sources the
   repo catalogue holds: the form of a `path` without `url`, whether it exists,
@@ -140,8 +140,8 @@ Warnings never change the exit status, so a layout the specification accepts
 never fails a pipeline on a heuristic.
 
 **Exit statuses.** `1` is reserved for a layout with violations; `2` means the
-tool could not do its job — bad usage, an unreadable file, `init` refusing to
-write. A pipeline can tell "the change is wrong" from "the check did not run".
+tool could not do its job — bad usage, an unreadable file or directory, `init`
+refusing to write. A pipeline can tell "the change is wrong" from "the check did not run".
 
 **Git as a subprocess, and optional.** Two read-only queries do not justify a
 Git library in the dependency tree and in the static binaries, and the
@@ -175,8 +175,9 @@ price is in [Limitations](#limitations).
 - **Every finding names a file relative to its layout root**, the catalogue's
   or the platform's, and **every error names a section** of the specification
   (`§8.2`). A warning names one only when it relates to one.
-- **A file that does not parse is a finding; a file that cannot be read is a
-  failure** of the tool, with exit status `2`.
+- **A file that does not parse is a finding; a file or directory that cannot be
+  read is a failure** of the tool, with exit status `2`: it is never skipped as
+  if it were absent.
 
 ## Limitations
 
