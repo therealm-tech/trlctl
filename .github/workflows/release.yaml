@@ -16,20 +16,29 @@ jobs:
   version:
     name: check the version
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: compare the tag with Cargo.toml
+      - name: install Python
+        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+        with:
+          cache: false
+          install_args: python
+      - name: derive the version from the tag and compare it with Cargo.toml
+        id: version
         run: |
           version="${GITHUB_REF_NAME#v}"
-          committed="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
+          committed="$(python -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
           if [ "$committed" != "$version" ]; then
             echo "Cargo.toml says ${committed} but the tag says ${version}." >&2
             echo "Cut releases with scripts/release.sh so the two stay in step." >&2
             exit 1
           fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
 
   build:
     name: build
@@ -38,6 +47,8 @@ jobs:
     # self-repository: actionlint 1.7.12 rejects GitHub's `$/` syntax. Switch to
     # `$/.github/workflows/build.yaml` once actionlint accepts it.
     uses: ./.github/workflows/build.yaml # zizmor: ignore[self-repository]
+    with:
+      version: ${{ needs.version.outputs.version }}
 
   github-release:
     name: GitHub release

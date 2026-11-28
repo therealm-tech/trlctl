@@ -10,7 +10,8 @@ explains how the code fits together and why.
 
 Install [mise](https://mise.jdx.dev/installing-mise.html), which installs
 every other tool at the version pinned in [`mise.toml`](mise.toml): the Rust
-toolchain, pre-commit, Task, and what the hooks and the release script call.
+toolchain, pre-commit, Task, Trivy, cargo-llvm-cov, and what the hooks and the
+release script call.
 You also need **Git**, used by `trlctl init` and by the tests.
 
 Then, from a fresh clone:
@@ -60,6 +61,13 @@ task test -- --test validate rejects_a_revision_without_url
 
 No test needs a network, a container runtime or a cluster.
 
+The suite with its line and region coverage, which prints the summary and
+writes the HTML report to `target/llvm-cov/html/`:
+
+```sh
+task coverage
+```
+
 A new rule comes with a test that breaks it in the fixture; a fix comes with
 a test that reproduces the bug. When the specification's worked example
 changes, copy it into `tests/fixtures/example/` again.
@@ -96,6 +104,7 @@ request and say why. CI runs the same hooks.
 | Workflow | Purpose | Reproduce locally |
 | --- | --- | --- |
 | [`quality`](.github/workflows/quality.yaml) | Quality gate: the pre-commit hooks and the tests | `task lint`, `task test` |
+| [`coverage`](.github/workflows/coverage.yaml) | Test coverage report: the summary on the run's page, the HTML report as its `coverage-html` artifact | `task coverage` |
 | [`security`](.github/workflows/security.yaml) | `trivy fs` on the lockfiles: fails on fixable `HIGH`/`CRITICAL` vulnerabilities, reports every finding to code scanning | `trivy fs --severity HIGH,CRITICAL --ignore-unfixed .` |
 | [`build`](.github/workflows/build.yaml) | The four release archives on native runners, and the Homebrew formula checked with `brew style` | `task build` builds the host's target only; the other targets and `brew style` run in CI |
 | [`release`](.github/workflows/release.yaml) | Publishes a release, see [Releasing](#releasing) | none: it publishes |

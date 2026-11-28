@@ -1,14 +1,17 @@
 min_version = "2026.11.10"
 
 [tools]
+"aqua:taiki-e/cargo-llvm-cov" = "0.9.2"
 "cargo:cargo-edit" = "0.13.14"
 # Builds the actionlint hook.
 go = "1.27.4"
 pre-commit = "4.7.0"
-# No Python code here: pre-commit builds its hook environments with it.
+# No Python code here: pre-commit builds its hook environments with it, and
+# CI reads the version in Cargo.toml with it.
 python = "3.13.18"
-rust = { version = "1.98.1", components = "clippy,rustfmt", profile = "minimal" }
+rust = { version = "1.98.1", components = "clippy,llvm-tools,rustfmt", profile = "minimal" }
 task = "3.54.0"
+trivy = "0.76.1"
 
 [settings]
 lockfile = true

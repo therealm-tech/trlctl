@@ -20,12 +20,23 @@ tasks:
   lint:
     desc: Run every pre-commit hook on the whole repository
     cmds:
-      - pre-commit run --all-files --show-diff-on-failure
+      - pre-commit run --all-files
 
   test:
     desc: Run the test suite
     cmds:
       - cargo test --locked {{.CLI_ARGS}}
+
+  coverage:
+    desc: Run the tests and measure their line and region coverage
+    cmds:
+      - cargo llvm-cov --workspace --all-targets --locked {{.CLI_ARGS}}
+      - cargo llvm-cov report --html
+
+  coverage:summary:
+    desc: Print the summary of the last coverage run
+    cmds:
+      - cargo llvm-cov report
 
   build:
     desc: Build the release binary
