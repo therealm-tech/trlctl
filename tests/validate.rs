@@ -22,6 +22,21 @@ impl Example {
         Self { _dir: dir, root }
     }
 
+    /// The worked example, with `team-quotas` as a Jsonnet source using `lib/`.
+    fn jsonnet() -> Self {
+        let example = Self::new();
+        example.write(
+            "apps/team-quotas/app.yaml",
+            "app:\n  path: apps/team-quotas/jsonnet\n",
+        );
+        example.write(
+            "apps/team-quotas/jsonnet/main.jsonnet",
+            "local team = import 'team.libsonnet';\n[]\n",
+        );
+        example.write("lib/team.libsonnet", "{}\n");
+        example
+    }
+
     fn write(&self, path: &str, content: &str) {
         let path = self.root.join(path);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -475,7 +490,8 @@ fn limits_a_catalogue_path_to_the_instance_app() {
     example.assert_finding(
         WHOAMI_DEV,
         "§8.2",
-        "must be `apps/whoami/charts/<chart>` or `apps/whoami/manifests`",
+        "must be `apps/whoami/charts/<chart>`, `apps/whoami/jsonnet` or \
+         `apps/whoami/manifests`",
     );
 }
 
@@ -544,6 +560,154 @@ fn keeps_jsonnet_imports_within_their_app() {
     );
     example.assert_finding(
         "apps/team-quotas/manifests/main.jsonnet",
+        "§8.2",
+        "reads files outside `apps/team-quotas/`",
+    );
+}
+
+#[test]
+fn accepts_a_jsonnet_source() {
+    let example = Example::jsonnet();
+    assert_eq!(example.findings(), Vec::new());
+}
+
+#[test]
+fn requires_a_jsonnet_file_directly_in_a_jsonnet_source() {
+    let example = Example::jsonnet();
+    example.remove("apps/team-quotas/jsonnet/main.jsonnet");
+    example.write("apps/team-quotas/jsonnet/nested/main.jsonnet", "[]\n");
+    example.assert_finding(
+        "apps/team-quotas/jsonnet/",
+        "§6.6",
+        "at least one `*.jsonnet` file directly in it",
+    );
+}
+
+#[test]
+fn rejects_a_kustomization_directly_in_a_jsonnet_source() {
+    for name in ["kustomization.yaml", "kustomization.yml", "Kustomization"] {
+        let example = Example::jsonnet();
+        let file = format!("apps/team-quotas/jsonnet/{name}");
+        example.write(&file, "resources: []\n");
+        example.assert_finding(&file, "§6.6", "must not contain a kustomization file");
+    }
+}
+
+#[test]
+fn ignores_a_kustomization_below_a_jsonnet_source() {
+    let example = Example::jsonnet();
+    example.write(
+        "apps/team-quotas/jsonnet/vendor/kustomization.yaml",
+        "resources: []\n",
+    );
+    assert_eq!(example.findings(), Vec::new());
+}
+
+#[test]
+fn rejects_a_chart_in_a_jsonnet_source() {
+    let example = Example::jsonnet();
+    let file = "apps/team-quotas/jsonnet/Chart.yaml";
+    example.write(file, "apiVersion: v2\n");
+    example.assert_finding(file, "§8.3", "`apps/team-quotas/jsonnet` must not contain");
+}
+
+#[test]
+fn follows_imports_through_the_libraries() {
+    let example = Example::jsonnet();
+    example.write("lib/team.libsonnet", "import 'nested/names.libsonnet'\n");
+    example.write(
+        "lib/nested/names.libsonnet",
+        "[import 'labels.libsonnet', import 'local.libsonnet']\n",
+    );
+    example.write("lib/labels.libsonnet", "{}\n");
+    // Found on the search path only, through `apps/<app>/jsonnet/`.
+    example.write("apps/team-quotas/jsonnet/local.libsonnet", "{}\n");
+    assert_eq!(example.findings(), Vec::new());
+
+    example.write(
+        "lib/labels.libsonnet",
+        "import '../apps/katib/x.libsonnet'\n",
+    );
+    example.assert_finding(
+        "lib/labels.libsonnet",
+        "§8.2",
+        "reads files outside `apps/team-quotas/` and `lib/`",
+    );
+}
+
+#[test]
+fn resolves_an_import_to_the_first_existing_file() {
+    let example = Example::jsonnet();
+    example.write(
+        "apps/team-quotas/jsonnet/main.jsonnet",
+        "import '../shared.libsonnet'\n",
+    );
+    example.write("shared.libsonnet", "{}\n");
+    // Missing next to the importing file, so `lib/../shared.libsonnet` is read.
+    example.assert_finding(
+        "apps/team-quotas/jsonnet/main.jsonnet",
+        "§8.2",
+        "`../shared.libsonnet` reads files outside",
+    );
+    example.write("apps/team-quotas/shared.libsonnet", "{}\n");
+    assert_eq!(example.findings(), Vec::new());
+}
+
+#[test]
+fn follows_code_imports_only() {
+    let example = Example::jsonnet();
+    example.write("lib/script.txt", "import '../../outside'\n");
+    example.write(
+        "apps/team-quotas/jsonnet/main.jsonnet",
+        "importstr 'script.txt'\n",
+    );
+    assert_eq!(example.findings(), Vec::new());
+    example.write(
+        "apps/team-quotas/jsonnet/main.jsonnet",
+        "import 'script.txt'\n",
+    );
+    example.assert_finding("lib/script.txt", "§8.2", "`../../outside` reads files");
+}
+
+#[test]
+fn stops_on_an_import_cycle() {
+    let example = Example::jsonnet();
+    example.write("lib/team.libsonnet", "import 'other.libsonnet'\n");
+    example.write("lib/other.libsonnet", "import 'team.libsonnet'\n");
+    assert_eq!(example.findings(), Vec::new());
+}
+
+#[test]
+fn keeps_the_libraries_off_the_search_path_of_manifests() {
+    let example = Example::new();
+    example.write("lib/shared.libsonnet", "{}\n");
+    let file = "apps/team-quotas/manifests/main.jsonnet";
+    example.write(file, "import 'shared.libsonnet'\n");
+    example.assert_warning(file, Some("§6.5"), "only found in `lib/`");
+    example.write(file, "import '../../../lib/shared.libsonnet'\n");
+    example.assert_finding(file, "§8.2", "reads files outside `apps/team-quotas/`");
+}
+
+#[test]
+fn reads_only_the_designated_source() {
+    let example = Example::new();
+    example.write("apps/whoami/jsonnet/kustomization.yaml", "resources: []\n");
+    example.write(
+        "apps/whoami/jsonnet/main.jsonnet",
+        "import '../../katib/x.libsonnet'\n",
+    );
+    assert_eq!(example.findings(), Vec::new());
+}
+
+#[test]
+fn follows_imports_out_of_the_source_within_the_app() {
+    let example = Example::new();
+    example.write(
+        "apps/team-quotas/lib/team.libsonnet",
+        "import '../../katib/x.libsonnet'\n",
+    );
+    example.assert_finding(
+        "apps/team-quotas/lib/team.libsonnet",
         "§8.2",
         "reads files outside `apps/team-quotas/`",
     );

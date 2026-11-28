@@ -67,9 +67,15 @@ they test.
   (§10.2), and the repositories a `cluster.yaml` names (§9).
 - **[`src/validate/source.rs`](src/validate/source.rs)** — the sources the
   repo catalogue holds: the form of a `path` without `url`, whether it exists,
-  no `Chart.yaml` under `manifests/`, and every reference out of the source —
-  kustomization entries, `file://` chart dependencies, Jsonnet imports —
-  staying within its app directory (§8.2, §8.3).
+  no `Chart.yaml` outside a chart (§8.3), a `*.jsonnet` file and no
+  kustomization directly in `jsonnet/` (§6.6), and kustomization entries,
+  `file://` chart dependencies and Jsonnet imports staying within what the
+  source may read (§8.2). Imports are followed from the Jsonnet files of the
+  source to every file they reach, each resolved to the first file that exists:
+  next to the importing file, then, for `jsonnet/` only, in `lib/` and in
+  `jsonnet/` (§6.7). A `jsonnet/` source may read its app directory and
+  `lib/`, any other source its app directory alone. The rest of `lib/` and of
+  the app directory is not read.
 - **[`src/urls.rs`](src/urls.rs)** — URL forms: a Git repository URL, a Helm
   chart repository or OCI registry, the `https://` form of a remote, and the
   normalised form two URLs of one repository share.
