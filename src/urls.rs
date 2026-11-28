@@ -50,6 +50,28 @@ pub fn to_https(remote: &str) -> Option<String> {
     Some(format!("https://{host}/{}", path.trim_start_matches('/')))
 }
 
+/// `url` as it may be shown in a diagnostic: without its userinfo. The login of
+/// an scp-like `user@host:path` is kept, as it carries no secret.
+#[must_use]
+pub fn without_credentials(url: &str) -> String {
+    let start = url.find("://").map_or(0, |index| index + "://".len());
+    let (scheme, rest) = url.split_at(start);
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or(rest);
+    let at = authority.rfind('@').or_else(|| {
+        // An unparsable URL has no reliable authority: a password holding a
+        // `/`, `?` or `#` cuts it short, before the `@`.
+        (!scheme.is_empty() && Url::parse(url).is_err())
+            .then(|| rest.rfind('@'))
+            .flatten()
+    });
+    match at {
+        Some(at) if !scheme.is_empty() || rest[..at].contains(':') => {
+            format!("{scheme}{}", &rest[at + 1..])
+        }
+        _ => url.to_owned(),
+    }
+}
+
 /// The form every URL of one repository reduces to: host and path, lowercased,
 /// whatever the transport (`ssh`, scp-like or `https`), credentials, port,
 /// trailing `/` or `.git`. `None` when `url` has no host (a local path).
@@ -115,7 +137,39 @@ fn is_schemeless_oci(url: &str) -> bool {
 mod tests {
     use super::{
         is_chart_repository_url, is_git_url, normalise_repository, same_repository, to_https,
+        without_credentials,
     };
+
+    #[test]
+    fn hides_credentials_in_any_form_of_url() {
+        for (url, shown) in [
+            ("https://user:secret@h.com/o/r", "https://h.com/o/r"),
+            ("https://secret@h.com", "https://h.com"),
+            ("https://user:se@cret@h.com/o/r", "https://h.com/o/r"),
+            ("ftp://user:secret@h.com/o/r", "ftp://h.com/o/r"),
+            (
+                "https://user:secret@h.com:port/o/r",
+                "https://h.com:port/o/r",
+            ),
+            ("https://user:se/cret@h.com/o/r", "https://h.com/o/r"),
+            ("user:secret@h.com:o/r", "h.com:o/r"),
+        ] {
+            assert_eq!(without_credentials(url), shown, "{url}");
+        }
+    }
+
+    #[test]
+    fn leaves_urls_without_credentials_alone() {
+        for url in [
+            "git@h.com:o/r.git",
+            "https://h.com/o/r@v1",
+            "ghcr.io/org/charts",
+            "/srv/git@host:x/repo",
+            "",
+        ] {
+            assert_eq!(without_credentials(url), url);
+        }
+    }
 
     #[test]
     fn converts_scp_like_remotes() {

@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use assert_cmd::cargo::cargo_bin_cmd;
+use predicates::prelude::*;
 use predicates::str::contains;
 use tempfile::TempDir;
 use trlctl::validate::{Finding, Severity, validate};
@@ -252,6 +253,60 @@ fn ignores_equivalent_forms_of_the_git_origin() {
         "ssh://git@GIT.example.com:2222/platform/gitops",
     ]);
     assert_eq!(example.findings(), Vec::new());
+}
+
+#[test]
+fn never_prints_the_credentials_of_a_url() {
+    let example = Example::new();
+    let git = |args: &[&str]| {
+        assert!(
+            Command::new("git")
+                .arg("-C")
+                .arg(&example.root)
+                .args(args)
+                .output()
+                .unwrap()
+                .status
+                .success()
+        );
+    };
+    git(&["init", "-q"]);
+    git(&["remote", "add", "origin", "placeholder"]);
+    example.write(
+        "clusters/mgmt-1/cluster.yaml",
+        "repo:\n  catalog:\n    url: https://user:s3cr3t@git.example.com\n    revision: main\n  \
+         platform:\n    url: https://user:s3cr3t@git.example.com/platform/gitops.git\n    revision: main\n",
+    );
+    example.write(
+        WHOAMI_DEV,
+        "app:\n  path: manifests\n  url: https://user:s3cr3t@git.example.com\n  revision: main\n",
+    );
+    // The last three are origins `to_https` cannot rewrite.
+    for origin in [
+        "https://user:s3cr3t@git.example.com/platform/other.git",
+        "https://user:s3cr3t@git.example.com:port/platform/gitops.git",
+        "ftp://user:s3cr3t@git.example.com/platform/gitops.git",
+        "user:s3cr3t@git.example.com:platform/gitops.git",
+    ] {
+        git(&["remote", "set-url", "origin", origin]);
+        let mut cmd = cargo_bin_cmd!("trlctl");
+        for (name, _) in std::env::vars().filter(|(name, _)| name.starts_with("TRLCTL_")) {
+            cmd.env_remove(name);
+        }
+        cmd.arg("validate")
+            .arg("--catalog")
+            .arg(&example.root)
+            .arg("--platform")
+            .arg(&example.root)
+            .args(["--log-filter", "debug"])
+            .assert()
+            .stdout(contains("does not designate the `origin`"))
+            .stdout(contains("is not a Git repository URL"))
+            .stdout(contains("must be a Git repository when `path` is set"))
+            .stdout(contains("s3cr3t").not())
+            .stderr(contains("git succeeded"))
+            .stderr(contains("s3cr3t").not());
+    }
 }
 
 #[test]

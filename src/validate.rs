@@ -12,7 +12,9 @@ use tracing::debug;
 
 use crate::git;
 use crate::names::is_valid_name;
-use crate::urls::{is_chart_repository_url, is_git_url, same_repository, to_https};
+use crate::urls::{
+    is_chart_repository_url, is_git_url, same_repository, to_https, without_credentials,
+};
 use config::{Loaded, STRING_FIELDS, app_mapping, cluster_repos, is_set, load, merge};
 use source::{KUSTOMIZATION_FILES, check_catalogue_source};
 
@@ -267,7 +269,8 @@ fn check_platform_repository(
     if let Some(origin) = git::origin_url(platform)
         && !same_repository(&origin, url)
     {
-        let origin = to_https(&origin).unwrap_or(origin);
+        let origin = to_https(&origin).unwrap_or_else(|| without_credentials(&origin));
+        let url = without_credentials(url);
         out.warn(
             file,
             Some("§9"),
@@ -408,8 +411,9 @@ fn check_effective(
                 file,
                 "§8.2",
                 format!(
-                    "effective configuration: `url` `{url}` must be a Helm chart repository (`https://…`) \
-                     or an OCI registry written without a scheme"
+                    "effective configuration: `url` `{}` must be a Helm chart repository (`https://…`) \
+                     or an OCI registry written without a scheme",
+                    without_credentials(url)
                 ),
             );
         }
@@ -420,7 +424,10 @@ fn check_effective(
             out.push(
                 file,
                 "§8.2",
-                format!("effective configuration: `url` `{url}` must be a Git repository when `path` is set"),
+                format!(
+                    "effective configuration: `url` `{}` must be a Git repository when `path` is set",
+                    without_credentials(url)
+                ),
             );
         }
         if !revision {
