@@ -3,14 +3,15 @@ use std::process::Command;
 
 use tracing::debug;
 
-/// The URL of the `origin` remote of the Git repository containing `dir`, if any.
+/// The URL is returned as Git holds it, credentials included. Any Git failure
+/// is `None`.
 #[must_use]
 pub fn origin_url(dir: &Path) -> Option<String> {
     let url = run_git(dir, &["remote", "get-url", "origin"])?;
     (!url.is_empty()).then_some(url)
 }
 
-/// The top-level directory of the Git repository containing `dir`, if any.
+/// Any Git failure is `None`, a missing `git` binary included.
 #[must_use]
 pub fn toplevel(dir: &Path) -> Option<PathBuf> {
     run_git(dir, &["rev-parse", "--show-toplevel"]).map(PathBuf::from)
@@ -21,7 +22,8 @@ fn run_git(dir: &Path, args: &[&str]) -> Option<String> {
     match output {
         Ok(output) if output.status.success() => {
             let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-            debug!(dir = %dir.display(), ?args, %stdout, "git succeeded");
+            // Never log `stdout` itself: a remote URL may carry a token.
+            debug!(dir = %dir.display(), ?args, stdout_len = stdout.len(), "git succeeded");
             Some(stdout)
         }
         Ok(output) => {

@@ -3,6 +3,7 @@ use std::path::Path;
 use std::process::Command;
 
 use assert_cmd::cargo::cargo_bin_cmd;
+use predicates::prelude::*;
 use predicates::str::contains;
 use trlctl::validate::validate;
 
@@ -66,6 +67,48 @@ fn discovers_an_ssh_origin_as_https() {
             .is_file()
     );
     assert_eq!(validate(dir.path(), dir.path()).unwrap(), Vec::new());
+}
+
+#[test]
+fn never_logs_the_credentials_of_the_origin() {
+    let dir = tempfile::tempdir().unwrap();
+    git(dir.path(), &["init", "-q"]);
+    git(
+        dir.path(),
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://user:s3cr3t@git.example.com/org/gitops.git",
+        ],
+    );
+    trlctl()
+        .current_dir(dir.path())
+        .args(["init", "--cluster", "c1", "--log-filter", "debug"])
+        .assert()
+        .success()
+        .stderr(contains("git succeeded"))
+        .stderr(contains("s3cr3t").not());
+}
+
+#[test]
+fn never_echoes_the_credentials_of_a_rejected_url() {
+    let dir = tempfile::tempdir().unwrap();
+    trlctl()
+        .current_dir(dir.path())
+        .args([
+            "init",
+            "--cluster",
+            "c1",
+            "--catalog-url",
+            "https://user:s3cr3t@git.example.com",
+        ])
+        .assert()
+        .code(2)
+        .stderr(contains(
+            "`https://git.example.com` is not a Git repository URL",
+        ))
+        .stderr(contains("s3cr3t").not());
 }
 
 #[test]

@@ -5,7 +5,7 @@ use std::path::Path;
 use serde_yaml_ng::{Mapping, Value};
 
 use super::Findings;
-use crate::urls::is_git_url;
+use crate::urls::{is_git_url, without_credentials};
 
 /// The `app.yaml` fields whose type is a string (SPEC.md §8.1).
 pub(super) const STRING_FIELDS: [&str; 6] =
@@ -214,7 +214,10 @@ fn check_role(repo: &Mapping, role: &str, file: &str, out: &mut Findings) -> Opt
         out.push(
             file,
             "§9",
-            format!("`repo.{role}.url` `{url}` is not a Git repository URL (Section 8.2)"),
+            format!(
+                "`repo.{role}.url` `{}` is not a Git repository URL (Section 8.2)",
+                without_credentials(url)
+            ),
         );
     }
     let path = match fields.get("path") {

@@ -6,7 +6,7 @@ use tracing::{debug, info};
 
 use crate::git;
 use crate::names::is_valid_name;
-use crate::urls::{is_git_url, to_https};
+use crate::urls::{is_git_url, to_https, without_credentials};
 
 /// Which roles of the layout the initialised directory holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,7 +69,8 @@ pub fn run(options: &Options, prompt: &mut impl Prompt) -> Result<Vec<PathBuf>> 
         ] {
             ensure!(
                 is_git_url(url),
-                "{flag} `{url}` is not a Git repository URL"
+                "{flag} `{}` is not a Git repository URL",
+                without_credentials(url)
             );
         }
         let cluster_dir = options.dir.join("clusters").join(&cluster);
