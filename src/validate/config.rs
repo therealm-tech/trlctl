@@ -2,9 +2,11 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+use anyhow::{Context, Result};
 use serde_yaml_ng::{Mapping, Value};
+use tracing::debug;
 
-use super::Findings;
+use super::{Findings, unreadable};
 use crate::urls::{is_git_url, without_credentials};
 
 /// The `app.yaml` fields whose type is a string (SPEC.md §8.1).
@@ -17,18 +19,28 @@ pub(super) enum Loaded {
     Value(Value),
 }
 
-pub(super) fn load(path: &Path) -> io::Result<Loaded> {
+pub(super) fn load(path: &Path) -> Result<Loaded> {
     let text = match fs::read_to_string(path) {
         Ok(text) => text,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Loaded::Missing),
-        Err(error) => return Err(error),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            debug!(path = %path.display(), "YAML file missing");
+            return Ok(Loaded::Missing);
+        }
+        Err(error) => return Err(error).with_context(|| unreadable(path)),
     };
     if text.trim().is_empty() {
+        debug!(path = %path.display(), "YAML file empty");
         return Ok(Loaded::Value(Value::Null));
     }
     Ok(match serde_yaml_ng::from_str(&text) {
-        Ok(value) => Loaded::Value(value),
-        Err(error) => Loaded::Unparsable(error.to_string()),
+        Ok(value) => {
+            debug!(path = %path.display(), "YAML file loaded");
+            Loaded::Value(value)
+        }
+        Err(error) => {
+            debug!(path = %path.display(), %error, "YAML file unparsable");
+            Loaded::Unparsable(error.to_string())
+        }
     })
 }
 

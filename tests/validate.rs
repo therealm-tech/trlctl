@@ -32,6 +32,28 @@ impl Example {
         fs::remove_file(self.root.join(path)).unwrap();
     }
 
+    /// Runs `f` while `path` is unreadable, then restores its mode; `None`
+    /// when permissions are not enforced, as for root.
+    #[cfg(unix)]
+    fn while_unreadable<T>(&self, path: &str, f: impl FnOnce() -> T) -> Option<T> {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path = self.root.join(path);
+        let permissions = fs::metadata(&path).unwrap().permissions();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+        let enforced = if path.is_dir() {
+            fs::read_dir(&path).is_err()
+        } else {
+            fs::read(&path).is_err()
+        };
+        let result = enforced.then(f);
+        fs::set_permissions(&path, permissions).unwrap();
+        if result.is_none() {
+            eprintln!("skipped: permissions are not enforced for this user");
+        }
+        result
+    }
+
     fn findings(&self) -> Vec<Finding> {
         validate(&self.root, &self.root).unwrap()
     }
@@ -603,6 +625,43 @@ fn cli_exits_zero_on_warnings_only() {
     let json: serde_json::Value = serde_json::from_slice(&output).unwrap();
     assert_eq!(json["findings"][0]["severity"], "warning");
     assert!(json["findings"][0].get("section").is_none());
+}
+
+#[cfg(unix)]
+#[test]
+fn names_an_unreadable_file() {
+    let example = Example::new();
+    let Some(result) = example.while_unreadable("apps/whoami/app.yaml", || {
+        validate(&example.root, &example.root)
+    }) else {
+        return;
+    };
+    let error = format!("{:#}", result.unwrap_err());
+    let path = example.root.join("apps/whoami/app.yaml");
+    assert!(
+        error.starts_with(&format!("cannot read {}: ", path.display())),
+        "{error}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn cli_exits_two_on_an_unreadable_directory() {
+    let example = Example::new();
+    let Some(assert) = example.while_unreadable("apps/whoami", || {
+        trlctl()
+            .args(["validate", "--catalog"])
+            .arg(&example.root)
+            .arg("--platform")
+            .arg(&example.root)
+            .assert()
+    }) else {
+        return;
+    };
+    let path = example.root.join("apps/whoami/app.yaml");
+    assert
+        .code(2)
+        .stderr(contains(format!("error: cannot read {}: ", path.display())));
 }
 
 #[test]

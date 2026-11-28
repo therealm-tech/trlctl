@@ -6,6 +6,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use anyhow::{Context, Result};
 use serde::Serialize;
 use serde_yaml_ng::{Mapping, Value};
 use tracing::debug;
@@ -82,7 +83,7 @@ impl Findings {
 /// # Errors
 ///
 /// When a directory or file of either layout cannot be read.
-pub fn validate(catalog: &Path, platform: &Path) -> io::Result<Vec<Finding>> {
+pub fn validate(catalog: &Path, platform: &Path) -> Result<Vec<Finding>> {
     let mut out = Findings::default();
     let apps = load_catalogue(catalog, &mut out)?;
     let envs = load_envs(platform, &mut out)?;
@@ -90,16 +91,16 @@ pub fn validate(catalog: &Path, platform: &Path) -> io::Result<Vec<Finding>> {
     Ok(out.0.into_iter().collect())
 }
 
-fn load_catalogue(catalog: &Path, out: &mut Findings) -> io::Result<BTreeMap<String, Mapping>> {
+fn load_catalogue(catalog: &Path, out: &mut Findings) -> Result<BTreeMap<String, Mapping>> {
     let mut apps = BTreeMap::new();
     let apps_dir = catalog.join("apps");
-    if !apps_dir.is_dir() {
+    if !is_dir(&apps_dir)? {
         out.push("apps/", "§4", "the repo catalogue has no `apps/` directory");
         return Ok(apps);
     }
     for (name, dir) in subdirectories(&apps_dir)? {
         let path = dir.join("app.yaml");
-        if !path.is_file() {
+        if !is_file(&path)? {
             debug!(dir = %dir.display(), "not an app: no app.yaml");
             continue;
         }
@@ -120,20 +121,19 @@ fn load_catalogue(catalog: &Path, out: &mut Findings) -> io::Result<BTreeMap<Str
     Ok(apps)
 }
 
-fn load_envs(
-    platform: &Path,
-    out: &mut Findings,
-) -> io::Result<BTreeMap<(String, String), Mapping>> {
+fn load_envs(platform: &Path, out: &mut Findings) -> Result<BTreeMap<(String, String), Mapping>> {
     let mut envs = BTreeMap::new();
     for (env, env_dir) in subdirectories(&platform.join("envs"))? {
         check_name(&env, &format!("envs/{env}/"), out);
         for (app, dir) in subdirectories(&env_dir)? {
             check_name(&app, &format!("envs/{env}/{app}/"), out);
             let path = dir.join("app.yaml");
-            if path.is_file() {
-                let mapping = app_file(&path, &relative(platform, &path), out)?;
-                envs.insert((env.clone(), app), mapping);
+            if !is_file(&path)? {
+                debug!(dir = %dir.display(), "no env level: no app.yaml");
+                continue;
             }
+            let mapping = app_file(&path, &relative(platform, &path), out)?;
+            envs.insert((env.clone(), app), mapping);
         }
     }
     Ok(envs)
@@ -145,9 +145,9 @@ fn check_clusters(
     apps: &BTreeMap<String, Mapping>,
     envs: &BTreeMap<(String, String), Mapping>,
     out: &mut Findings,
-) -> io::Result<()> {
+) -> Result<()> {
     let clusters_dir = platform.join("clusters");
-    if !clusters_dir.is_dir() {
+    if !is_dir(&clusters_dir)? {
         out.push(
             "clusters/",
             "§4",
@@ -163,9 +163,11 @@ fn check_clusters(
         for (app, dir) in subdirectories(&cluster_dir.join("apps"))? {
             check_name(&app, &format!("clusters/{cluster}/apps/{app}/"), out);
             let path = dir.join("app.yaml");
-            if path.is_file() {
-                cluster_apps.insert(app, app_file(&path, &relative(platform, &path), out)?);
+            if !is_file(&path)? {
+                debug!(dir = %dir.display(), "no cluster×app level: no app.yaml");
+                continue;
             }
+            cluster_apps.insert(app, app_file(&path, &relative(platform, &path), out)?);
         }
         for (env, env_dir) in subdirectories(&cluster_dir.join("envs"))? {
             let level = Levels {
@@ -191,7 +193,7 @@ fn check_unread_directories(
     cluster_dir: &Path,
     apps: &BTreeMap<String, Mapping>,
     out: &mut Findings,
-) -> io::Result<()> {
+) -> Result<()> {
     for (name, dir) in subdirectories(cluster_dir)? {
         if name == "apps" || name == "envs" {
             continue;
@@ -207,7 +209,7 @@ fn check_unread_directories(
                 ),
             );
         } else if apps.contains_key(&name)
-            && (dir.join("app.yaml").is_file() || dir.join("values.yaml").is_file())
+            && (is_file(&dir.join("app.yaml"))? || is_file(&dir.join("values.yaml"))?)
         {
             out.warn(
                 &file,
@@ -221,7 +223,7 @@ fn check_unread_directories(
     Ok(())
 }
 
-fn check_cluster_file(platform: &Path, cluster_dir: &Path, out: &mut Findings) -> io::Result<()> {
+fn check_cluster_file(platform: &Path, cluster_dir: &Path, out: &mut Findings) -> Result<()> {
     let path = cluster_dir.join("cluster.yaml");
     let file = relative(platform, &path);
     let value = match load(&path)? {
@@ -309,11 +311,11 @@ struct Levels<'a> {
     env: &'a str,
 }
 
-fn check_env(level: &Levels, env_dir: &Path, out: &mut Findings) -> io::Result<()> {
+fn check_env(level: &Levels, env_dir: &Path, out: &mut Findings) -> Result<()> {
     let (cluster, env) = (level.cluster, level.env);
     for (app, app_dir) in subdirectories(env_dir)? {
         for unread in ["app.yaml", "values.yaml"] {
-            if app_dir.join(unread).is_file() {
+            if is_file(&app_dir.join(unread))? {
                 out.warn(
                     &format!("clusters/{cluster}/envs/{env}/{app}/{unread}"),
                     Some("§7.3"),
@@ -326,7 +328,8 @@ fn check_env(level: &Levels, env_dir: &Path, out: &mut Findings) -> io::Result<(
         }
         for (instance, dir) in subdirectories(&app_dir)? {
             let path = dir.join("app.yaml");
-            if !path.is_file() {
+            if !is_file(&path)? {
+                debug!(dir = %dir.display(), "not an instance: no app.yaml");
                 continue;
             }
             check_name(env, &format!("clusters/{cluster}/envs/{env}/"), out);
@@ -370,7 +373,7 @@ fn check_effective(
     effective: &Mapping,
     file: &str,
     out: &mut Findings,
-) -> io::Result<()> {
+) -> Result<()> {
     for field in STRING_FIELDS {
         if let Some(Value::String(value)) = effective.get(field)
             && value.is_empty()
@@ -452,13 +455,13 @@ fn check_effective(
     Ok(())
 }
 
-fn check_instance_manifests(platform: &Path, dir: &Path, out: &mut Findings) -> io::Result<()> {
-    if !dir.is_dir() {
+fn check_instance_manifests(platform: &Path, dir: &Path, out: &mut Findings) -> Result<()> {
+    if !is_dir(dir)? {
         return Ok(());
     }
-    for entry in fs::read_dir(dir)? {
-        let path = entry?.path();
-        if path.is_dir() {
+    for entry in entries(dir)? {
+        let path = entry.path();
+        if is_dir(&path)? {
             check_instance_manifests(platform, &path, out)?;
         } else if path
             .file_name()
@@ -474,7 +477,7 @@ fn check_instance_manifests(platform: &Path, dir: &Path, out: &mut Findings) -> 
     Ok(())
 }
 
-fn app_file(path: &Path, file: &str, out: &mut Findings) -> io::Result<Mapping> {
+fn app_file(path: &Path, file: &str, out: &mut Findings) -> Result<Mapping> {
     Ok(match load(path)? {
         Loaded::Missing => Mapping::new(),
         Loaded::Unparsable(error) => {
@@ -498,10 +501,10 @@ fn check_name(name: &str, file: &str, out: &mut Findings) {
     }
 }
 
-fn has_instances(dir: &Path) -> io::Result<bool> {
+fn has_instances(dir: &Path) -> Result<bool> {
     for (_, app_dir) in subdirectories(dir)? {
         for (_, instance_dir) in subdirectories(&app_dir)? {
-            if instance_dir.join("app.yaml").is_file() {
+            if is_file(&instance_dir.join("app.yaml"))? {
                 return Ok(true);
             }
         }
@@ -509,14 +512,16 @@ fn has_instances(dir: &Path) -> io::Result<bool> {
     Ok(false)
 }
 
-fn subdirectories(dir: &Path) -> io::Result<Vec<(String, PathBuf)>> {
-    if !dir.is_dir() {
+fn subdirectories(dir: &Path) -> Result<Vec<(String, PathBuf)>> {
+    if !is_dir(dir)? {
         return Ok(Vec::new());
     }
     let mut dirs = Vec::new();
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
-        if entry.file_type()?.is_dir() {
+    for entry in entries(dir)? {
+        let file_type = entry
+            .file_type()
+            .with_context(|| unreadable(&entry.path()))?;
+        if file_type.is_dir() {
             dirs.push((
                 entry.file_name().to_string_lossy().into_owned(),
                 entry.path(),
@@ -525,6 +530,43 @@ fn subdirectories(dir: &Path) -> io::Result<Vec<(String, PathBuf)>> {
     }
     dirs.sort();
     Ok(dirs)
+}
+
+pub(crate) fn entries(dir: &Path) -> Result<Vec<fs::DirEntry>> {
+    let context = || unreadable(dir);
+    fs::read_dir(dir)
+        .with_context(context)?
+        .map(|entry| entry.with_context(context))
+        .collect()
+}
+
+pub(crate) fn is_file(path: &Path) -> Result<bool> {
+    Ok(metadata(path)?.is_some_and(|m| m.is_file()))
+}
+
+pub(crate) fn is_dir(path: &Path) -> Result<bool> {
+    Ok(metadata(path)?.is_some_and(|m| m.is_dir()))
+}
+
+/// `Path::is_file` and `Path::is_dir` answer `false` when permission is
+/// denied, which would skip an unreadable directory as if it were absent.
+fn metadata(path: &Path) -> Result<Option<fs::Metadata>> {
+    match fs::metadata(path) {
+        Ok(metadata) => Ok(Some(metadata)),
+        Err(error)
+            if matches!(
+                error.kind(),
+                io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+            ) =>
+        {
+            Ok(None)
+        }
+        Err(error) => Err(error).with_context(|| unreadable(path)),
+    }
+}
+
+pub(crate) fn unreadable(path: &Path) -> String {
+    format!("cannot read {}", path.display())
 }
 
 pub(crate) fn relative(root: &Path, path: &Path) -> String {
