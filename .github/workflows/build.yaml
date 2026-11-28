@@ -25,6 +25,11 @@ on:
       - .github/workflows/build.yaml
   workflow_dispatch:
   workflow_call:
+    inputs:
+      version:
+        description: Version of the archives, derived from the release tag
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -41,13 +46,25 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - name: check out the repository
+        if: ${{ !inputs.version }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: read the version from Cargo.toml
+      - name: install Python
+        if: ${{ !inputs.version }}
+        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+        with:
+          cache: false
+          install_args: python
+      - name: take the version from the caller, or from Cargo.toml
         id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
+          version="$INPUT_VERSION"
+          if [ -z "$version" ]; then
+            version="$(python -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
+          fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
   binaries:
@@ -74,17 +91,17 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: install the Rust toolchain
+      - name: install the Rust toolchain and Task
         uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
         with:
           cache: false
-          install_args: rust
+          install_args: rust task
       - name: show the Rust toolchain
         run: rustc --version --verbose
       - name: add the Rust target
         run: rustup target add "$TARGET"
       - name: build the release binary
-        run: cargo build --release --locked --target "$TARGET"
+        run: task build -- --target "$TARGET"
       - name: check that the Linux binary is static
         if: contains(matrix.target, 'linux-musl')
         run: |
