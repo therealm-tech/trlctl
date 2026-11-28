@@ -159,20 +159,61 @@ fn refuses_to_overwrite_without_force() {
 
 #[test]
 fn force_comes_from_the_environment_too() {
+    for value in ["true", "1", "yes"] {
+        let dir = tempfile::tempdir().unwrap();
+        for _ in 0..2 {
+            trlctl()
+                .current_dir(dir.path())
+                .env("TRLCTL_FORCE", value)
+                .args([
+                    "init",
+                    "--cluster",
+                    "c1",
+                    "--catalog-url",
+                    "https://git.example.com/a.git",
+                ])
+                .assert()
+                .success();
+        }
+    }
+}
+
+#[test]
+fn rejects_an_environment_value_that_is_not_a_boolean() {
     let dir = tempfile::tempdir().unwrap();
-    for _ in 0..2 {
+    trlctl()
+        .current_dir(dir.path())
+        .env("TRLCTL_FORCE", "flase")
+        .args(["init", "--catalog-only"])
+        .assert()
+        .code(2)
+        .stderr(contains("value was not a boolean"));
+    assert!(!dir.path().join("apps").exists());
+}
+
+#[test]
+fn scopes_come_from_the_environment_too() {
+    for (variable, created, absent) in [
+        ("TRLCTL_CATALOG_ONLY", "apps", "clusters"),
+        ("TRLCTL_PLATFORM_ONLY", "clusters", "apps"),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
         trlctl()
             .current_dir(dir.path())
-            .env("TRLCTL_FORCE", "true")
+            .env(variable, "1")
             .args([
                 "init",
                 "--cluster",
                 "c1",
                 "--catalog-url",
                 "https://git.example.com/a.git",
+                "--platform-url",
+                "https://git.example.com/b.git",
             ])
             .assert()
             .success();
+        assert!(dir.path().join(created).is_dir(), "{variable}");
+        assert!(!dir.path().join(absent).exists(), "{variable}");
     }
 }
 
