@@ -123,7 +123,10 @@ instance.
 For each instance, the effective configuration is the catalogue `app.yaml`,
 overridden by `envs/<env>/<app>/app.yaml`, then by
 `clusters/<cluster>/apps/<app>/app.yaml`, then by the instance's own
-`app.yaml`; mappings combine key by key and a null value is not set.
+`app.yaml`; mappings combine key by key, recursively, and any other value
+replaces the one below it. A null removes its key, and `app: null` discards
+every less specific level, whereas an empty file or `app: {}` contributes
+nothing.
 `check_effective` then checks the combination of `chart`, `path`, `url` and
 `revision`. A source with `path` and no `url` lives in the repo catalogue, so
 it is checked there by [`src/validate/source.rs`](src/validate/source.rs).

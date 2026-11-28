@@ -44,11 +44,25 @@ pub(super) fn load(path: &Path) -> Result<Loaded> {
     })
 }
 
-/// The `app` mapping of an `app.yaml` document, after reporting what breaks
-/// the layout specification §8.1. A document that contributes nothing yields an empty mapping.
-pub(super) fn app_mapping(value: &Value, file: &str, out: &mut Findings) -> Mapping {
+/// What one `app.yaml` level brings to the effective configuration.
+pub(super) enum AppLevel {
+    /// `app: null`, which discards the less specific levels.
+    Discard,
+    /// Empty when the level contributes nothing.
+    Override(Mapping),
+}
+
+impl AppLevel {
+    pub(super) fn nothing() -> Self {
+        Self::Override(Mapping::new())
+    }
+}
+
+/// The level an `app.yaml` document describes, after reporting what breaks
+/// the layout specification §8.1.
+pub(super) fn app_level(value: &Value, file: &str, out: &mut Findings) -> AppLevel {
     let root = match value {
-        Value::Null => return Mapping::new(),
+        Value::Null => return AppLevel::nothing(),
         Value::Mapping(root) => root,
         _ => {
             out.push(
@@ -56,7 +70,7 @@ pub(super) fn app_mapping(value: &Value, file: &str, out: &mut Findings) -> Mapp
                 "§8.1",
                 "the document must be a mapping whose only root key is `app`",
             );
-            return Mapping::new();
+            return AppLevel::nothing();
         }
     };
     for key in root.keys().filter(|key| key.as_str() != Some("app")) {
@@ -70,10 +84,11 @@ pub(super) fn app_mapping(value: &Value, file: &str, out: &mut Findings) -> Mapp
         );
     }
     match root.get("app") {
-        None | Some(Value::Null) => Mapping::new(),
+        None => AppLevel::nothing(),
+        Some(Value::Null) => AppLevel::Discard,
         Some(Value::Mapping(app)) => {
             check_field_types(app, file, out);
-            app.clone()
+            AppLevel::Override(app.clone())
         }
         Some(other) => {
             out.push(
@@ -81,7 +96,7 @@ pub(super) fn app_mapping(value: &Value, file: &str, out: &mut Findings) -> Mapp
                 "§8.1",
                 format!("`app` must be a mapping, found {}", kind(other)),
             );
-            Mapping::new()
+            AppLevel::nothing()
         }
     }
 }
@@ -124,11 +139,25 @@ fn check_field_types(app: &Mapping, file: &str, out: &mut Findings) {
     }
 }
 
-/// Overrides `base` with `over` as the layout specification §10.2 describes: mappings combine
-/// key by key, anything else set replaces, and a null value is not set.
-pub(super) fn merge(base: &mut Mapping, over: &Mapping) {
+/// The effective configuration of `levels`, from least to most specific
+/// (layout specification §10.2).
+pub(super) fn effective<'a>(levels: impl IntoIterator<Item = &'a AppLevel>) -> Mapping {
+    let mut effective = Mapping::new();
+    for level in levels {
+        match level {
+            AppLevel::Discard => effective.clear(),
+            AppLevel::Override(app) => merge(&mut effective, app),
+        }
+    }
+    effective
+}
+
+/// Overrides `base` with `over`: mappings combine key by key, a null value
+/// removes the key, and anything else replaces.
+fn merge(base: &mut Mapping, over: &Mapping) {
     for (key, value) in over {
         if value.is_null() {
+            base.remove(key);
             continue;
         }
         match (base.get_mut(key), value) {
@@ -274,10 +303,14 @@ fn kind(value: &Value) -> &'static str {
 mod tests {
     use serde_yaml_ng::{Mapping, Value};
 
-    use super::merge;
+    use super::{AppLevel, effective, merge};
 
     fn mapping(yaml: &str) -> Mapping {
         serde_yaml_ng::from_str(yaml).unwrap()
+    }
+
+    fn level(yaml: &str) -> AppLevel {
+        AppLevel::Override(mapping(yaml))
     }
 
     #[test]
@@ -316,13 +349,50 @@ mod tests {
     }
 
     #[test]
-    fn empty_values_override_and_nulls_do_not() {
+    fn empty_values_override_and_nulls_remove() {
         let mut base = mapping("syncOptions: [A]\nnamespace: x\nchart: c");
         merge(
             &mut base,
             &mapping("syncOptions: []\nnamespace: ''\nchart: null"),
         );
-        assert_eq!(base, mapping("syncOptions: []\nnamespace: ''\nchart: c"));
+        assert_eq!(base, mapping("syncOptions: []\nnamespace: ''"));
+    }
+
+    #[test]
+    fn nested_nulls_remove_only_their_key() {
+        let mut base = mapping("managedNamespaceMetadata: {labels: {a: '1', b: '2'}}");
+        merge(
+            &mut base,
+            &mapping("managedNamespaceMetadata: {labels: {a: null}}"),
+        );
+        assert_eq!(
+            base,
+            mapping("managedNamespaceMetadata: {labels: {b: '2'}}")
+        );
+    }
+
+    #[test]
+    fn a_null_removes_a_whole_mapping_until_set_again() {
+        let levels = [
+            level("managedNamespaceMetadata: {labels: {a: '1'}}"),
+            level("managedNamespaceMetadata: null"),
+            level("managedNamespaceMetadata: {labels: {b: '2'}}"),
+        ];
+        assert_eq!(effective(&levels[..2]), Mapping::new());
+        assert_eq!(
+            effective(&levels),
+            mapping("managedNamespaceMetadata: {labels: {b: '2'}}")
+        );
+    }
+
+    #[test]
+    fn a_discarding_level_keeps_only_the_more_specific_ones() {
+        let levels = [
+            level("chart: c\nnamespace: x"),
+            AppLevel::Discard,
+            level("revision: v1"),
+        ];
+        assert_eq!(effective(&levels), mapping("revision: v1"));
     }
 
     #[test]
